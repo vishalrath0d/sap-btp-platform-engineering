@@ -13,7 +13,13 @@ default-env.json
 .terraform/
 *.tfstate
 *.tfstate.backup
-*.tfvars
-!*.tfvars.example
+# environments/<env>/terraform.tfvars files ARE committed (real
+# convention, mirrored from sm-infraforge/langfuse) - they never contain
+# secrets (btp_username/btp_password/xsuaa_xsappname are HCP Terraform
+# workspace variables instead, see infra/terraform/README.md). Only a
+# stray/local tfvars dropped outside environments/ is ignored, as a
+# guard against accidentally committing a personal override.
+/infra/terraform/terraform.tfvars
+/infra/terraform/*.auto.tfvars
 alerts.jsonl
 mta_archives/
