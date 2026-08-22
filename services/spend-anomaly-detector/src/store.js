@@ -27,4 +27,11 @@ function list({ flaggedOnly = false, limit = 50 } = {}) {
     .slice(0, limit);
 }
 
-module.exports = { record, get, list };
+function listSince(timestamp, { severity } = {}) {
+  return [...reviews.values()]
+    .filter((r) => r.receivedAt > timestamp)
+    .filter((r) => !severity || r.severity === severity)
+    .sort((a, b) => a.receivedAt - b.receivedAt);
+}
+
+module.exports = { record, get, list, listSince };
