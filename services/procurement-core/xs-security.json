@@ -1,0 +1,54 @@
+{
+  "xsappname": "procurement-core",
+  "tenant-mode": "dedicated",
+  "description": "XSUAA security descriptor for procurement-core - defines the same three roles the local mocked-auth setup uses (package.json's cds.requires.auth.users), so nothing about the RBAC model changes between local dev and a real deployment, only how identity is asserted.",
+  "scopes": [
+    {
+      "name": "$XSAPPNAME.Requester",
+      "description": "Can create and submit Purchase Requisitions"
+    },
+    {
+      "name": "$XSAPPNAME.Approver",
+      "description": "Can approve or reject submitted Purchase Requisitions"
+    },
+    {
+      "name": "$XSAPPNAME.IntegrationAdmin",
+      "description": "Can run the legacy-supplier sync integration action"
+    }
+  ],
+  "attributes": [],
+  "role-templates": [
+    {
+      "name": "Requester",
+      "description": "Purchase Requisition requester",
+      "scope-references": ["$XSAPPNAME.Requester"]
+    },
+    {
+      "name": "Approver",
+      "description": "Purchase Requisition approver",
+      "scope-references": ["$XSAPPNAME.Approver"]
+    },
+    {
+      "name": "IntegrationAdmin",
+      "description": "Legacy system integration administrator",
+      "scope-references": ["$XSAPPNAME.IntegrationAdmin"]
+    }
+  ],
+  "role-collections": [
+    {
+      "name": "ProcureIQ Requester",
+      "description": "Business users who raise Purchase Requisitions",
+      "role-template-references": ["$XSAPPNAME.Requester"]
+    },
+    {
+      "name": "ProcureIQ Approver",
+      "description": "Managers/Directors/CFO-office who approve Purchase Requisitions",
+      "role-template-references": ["$XSAPPNAME.Approver"]
+    },
+    {
+      "name": "ProcureIQ Integration Admin",
+      "description": "Runs the legacy supplier sync",
+      "role-template-references": ["$XSAPPNAME.IntegrationAdmin"]
+    }
+  ]
+}
