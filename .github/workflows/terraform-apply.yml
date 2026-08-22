@@ -1,0 +1,46 @@
+name: terraform apply (dev)
+
+# Deliberately workflow_dispatch-only (manual trigger), never on push -
+# this project's instruction is "build it, don't deploy yet, test locally
+# first, deploy after review." Also gated behind the `dev` GitHub
+# Environment, which can (and should, before this is ever really used)
+# have required reviewers configured - two independent gates, not one,
+# before any real infrastructure changes.
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type "apply" to confirm you intend to run this against the real BTP trial subaccount'
+        required: true
+
+defaults:
+  run:
+    working-directory: infra/terraform/environments/dev
+
+permissions:
+  contents: read
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    environment: dev # configure required reviewers on this GitHub Environment
+                       # before this job can ever actually run for real
+    steps:
+      - name: Verify confirmation input
+        if: github.event.inputs.confirm != 'apply'
+        run: |
+          echo "::error::Confirmation input must be exactly 'apply' - got '${{ github.event.inputs.confirm }}'"
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+
+      - name: terraform init
+        run: terraform init
+
+      - name: terraform apply
+        run: terraform apply -auto-approve -input=false
