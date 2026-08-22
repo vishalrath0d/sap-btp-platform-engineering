@@ -35,13 +35,20 @@
         "kind": "mocked",
         "users": {
           "alice": {
-            "roles": ["Requester"]
+            "roles": [
+              "Requester"
+            ]
           },
           "bob": {
-            "roles": ["Approver"]
+            "roles": [
+              "Approver"
+            ]
           },
           "carol": {
-            "roles": ["Requester", "Approver"]
+            "roles": [
+              "Requester",
+              "Approver"
+            ]
           }
         }
       },
@@ -54,5 +61,6 @@
         }
       }
     }
-  }
+  },
+  "sapux": []
 }
