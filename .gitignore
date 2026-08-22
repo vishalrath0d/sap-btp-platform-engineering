@@ -13,7 +13,6 @@ default-env.json
 .terraform/
 *.tfstate
 *.tfstate.backup
-.terraform.lock.hcl
 *.tfvars
 !*.tfvars.example
 alerts.jsonl

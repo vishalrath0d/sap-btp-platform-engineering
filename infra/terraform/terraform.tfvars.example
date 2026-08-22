@@ -1,0 +1,14 @@
+# Copy to terraform.tfvars (gitignored) and fill in - or export as
+# TF_VAR_* environment variables instead, which is preferable for
+# btp_username/btp_password specifically so they never touch disk at all.
+
+globalaccount_subdomain = "CHANGE_ME"      # BTP cockpit > Account Explorer
+subaccount_subdomain    = "4cbf0c12trial-ga"
+region                  = "us10"           # US East (VA) - AWS; verify in cockpit
+environment              = "dev"
+
+# btp_username / btp_password: intentionally NOT in this example file even
+# as placeholders - set them via:
+#   export TF_VAR_btp_username="you@example.com"
+#   export TF_VAR_btp_password="..."
+# never in a committed .tfvars file.
