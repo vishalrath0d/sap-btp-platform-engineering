@@ -4,6 +4,9 @@ const express = require('express');
 const config = require('./config');
 const rules = require('./rules');
 const store = require('./store');
+const featureFlags = require('./feature-flags');
+const jobScheduler = require('./job-scheduler');
+const alertNotification = require('./alert-notification');
 
 function createApp() {
   const app = express();
@@ -48,6 +51,35 @@ function createApp() {
     const review = store.get(req.params.poNumber);
     if (!review) return res.status(404).json({ error: `no review on record for ${req.params.poNumber}` });
     res.json(review);
+  });
+
+  // Simulated SAP Feature Flags service admin surface — toggling behavior
+  // at runtime, no redeploy. See src/feature-flags.js.
+  app.get('/admin/flags', (req, res) => {
+    res.json({ flags: featureFlags.list() });
+  });
+
+  app.put('/admin/flags/:name', (req, res) => {
+    try {
+      const flag = featureFlags.setEnabled(req.params.name, req.body?.enabled);
+      res.json(flag);
+    } catch (err) {
+      res.status(404).json({ error: err.message });
+    }
+  });
+
+  /**
+   * The endpoint a real SAP Job Scheduling Service job definition would
+   * call on a cron schedule (e.g. nightly). See src/job-scheduler.js for
+   * why there's no in-app scheduler here.
+   */
+  app.post('/jobs/nightly-digest', (req, res) => {
+    res.json(jobScheduler.runNightlyDigest());
+  });
+
+  // Simulated SAP Alert Notification Service outbox.
+  app.get('/alerts', (req, res) => {
+    res.json({ alerts: alertNotification.list(Number(req.query.limit) || 50) });
   });
 
   return app;

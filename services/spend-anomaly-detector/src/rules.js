@@ -1,6 +1,7 @@
 'use strict';
 
 const config = require('./config');
+const featureFlags = require('./feature-flags');
 
 /**
  * Deterministic, explainable rules — not a trained model. Each rule states
@@ -46,8 +47,11 @@ function evaluate(po) {
 
   // A classic, real spend-analytics heuristic: a suspiciously round total on
   // an itemized order can indicate an estimated or fabricated invoice rather
-  // than one built up from real line-item costs.
-  if (po.totalAmount >= 1000 && po.totalAmount % 1000 === 0) {
+  // than one built up from real line-item costs. Gated by a feature flag —
+  // toggleable at runtime (see src/feature-flags.js), e.g. to disable it
+  // temporarily if a legitimate bulk-order supplier is generating noisy
+  // false positives, without a redeploy.
+  if (featureFlags.isEnabled('ROUND_NUMBER_AMOUNT_RULE') && po.totalAmount >= 1000 && po.totalAmount % 1000 === 0) {
     flags.push({
       rule: 'ROUND_NUMBER_AMOUNT',
       detail: `Total ${po.totalAmount} is an exact multiple of 1000 on an itemized order — worth a sanity check against the line items`,
