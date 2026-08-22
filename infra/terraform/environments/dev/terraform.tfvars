@@ -1,16 +1,16 @@
 environment             = "dev"
 globalaccount_subdomain = "4cbf0c12trial-ga" # confirmed from the real Account
-                                               # Explorer page: "Subdomain: 4cbf0c12trial-ga"
-                                               # - genuinely DIFFERENT from the subaccount's
-                                               # own subdomain below (no "-ga") - my earlier
-                                               # guess that they were the same value was wrong
-subaccount_subdomain    = "4cbf0c12trial" # was wrongly "4cbf0c12trial-ga" - confirmed
-                                            # against the real cockpit General panel,
-                                            # no "-ga" suffix exists
-region                  = "us10" # confirmed: matches the real CF API endpoint
-                                   # (api.cf.us10-001.hana.ondemand.com) shown in the
-                                   # cockpit's own Cloud Foundry Environment panel
-kyma_administrators     = ["you@example.com"]
+# Explorer page: "Subdomain: 4cbf0c12trial-ga"
+# - genuinely DIFFERENT from the subaccount's
+# own subdomain below (no "-ga") - my earlier
+# guess that they were the same value was wrong
+subaccount_subdomain = "4cbf0c12trial" # was wrongly "4cbf0c12trial-ga" - confirmed
+# against the real cockpit General panel,
+# no "-ga" suffix exists
+region = "us10" # confirmed: matches the real CF API endpoint
+# (api.cf.us10-001.hana.ondemand.com) shown in the
+# cockpit's own Cloud Foundry Environment panel
+kyma_administrators = ["you@example.com"]
 
 # btp_username / btp_password / xsuaa_xsappname: intentionally NOT here,
 # even as placeholders - Local-execution-mode HCP Terraform workspaces
