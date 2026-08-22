@@ -16,6 +16,12 @@ entity Suppliers : cuid, managed {
   email          : String(120);
   riskRating     : String(6) enum { LOW; MEDIUM; HIGH } default 'MEDIUM';
   status         : String(10) enum { ACTIVE; INACTIVE; BLOCKED } default 'ACTIVE';
+  // Provenance for suppliers synced in from an external system (see
+  // srv/lib/legacy-supplier-mapper.js) — null for suppliers created
+  // directly in ProcureIQ. externalId + sourceSystem together are how
+  // syncLegacySuppliers() decides create-vs-update idempotently.
+  externalId     : String(40);
+  sourceSystem   : String(30);
   purchaseOrders : Association to many PurchaseOrders on purchaseOrders.supplier = $self;
 }
 

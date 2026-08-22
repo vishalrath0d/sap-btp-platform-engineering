@@ -1,0 +1,9 @@
+{
+  "LEGACY_SUPPLIER_ERP": {
+    "Name": "LEGACY_SUPPLIER_ERP",
+    "URL": "http://localhost:4007",
+    "ProxyType": "OnPremise",
+    "Authentication": "NoAuthentication",
+    "Description": "Legacy on-prem supplier master system. ProxyType=OnPremise means that in a real BTP landscape this destination is only reachable through Cloud Connector's secure tunnel from inside the customer's network — the app never talks to the on-prem system directly. Simulated here as a direct localhost call since there's no real on-prem network segment to tunnel to from a laptop; see srv/lib/destination.js for exactly where the real SAP Destination service call would replace this file."
+  }
+}

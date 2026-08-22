@@ -4,6 +4,8 @@ const cds = require('@sap/cds');
 const { approverRoleFor } = require('./lib/approval-rules');
 const { nextNumber } = require('./lib/sequence');
 const { publishPurchaseOrderCreated } = require('./lib/events');
+const { getDestination } = require('./lib/destination');
+const { mapLegacySupplier } = require('./lib/legacy-supplier-mapper');
 
 module.exports = cds.service.impl(async function () {
   const {
@@ -161,5 +163,53 @@ module.exports = cds.service.impl(async function () {
     await UPDATE(PurchaseRequisitions, id).with({ status: 'REJECTED' });
 
     return SELECT.one.from(PurchaseRequisitions, id);
+  });
+
+  // -- syncLegacySuppliers: pull supplier master data from the on-prem ----
+  // legacy system through the Destination-shaped connectivity layer --------
+
+  this.on('syncLegacySuppliers', async () => {
+    const destination = getDestination('LEGACY_SUPPLIER_ERP');
+    const res = await fetch(`${destination.URL}/legacy/suppliers`, { signal: AbortSignal.timeout(5000) });
+    if (!res.ok) {
+      const err = new Error(`Legacy ERP gateway responded ${res.status}`);
+      err.status = 502;
+      throw err;
+    }
+    const legacyRecords = await res.json();
+
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+    const errors = [];
+
+    for (const record of legacyRecords) {
+      let mapped;
+      try {
+        mapped = mapLegacySupplier(record);
+      } catch (err) {
+        errors.push({ record: record.SUPPLIER_ID || '(unknown)', error: err.message });
+        skipped++;
+        continue;
+      }
+
+      const existing = await SELECT.one
+        .from(Suppliers)
+        .where({ externalId: mapped.externalId, sourceSystem: mapped.sourceSystem });
+
+      if (existing) {
+        await UPDATE(Suppliers, existing.ID).with({
+          riskRating: mapped.riskRating,
+          status: mapped.status,
+          email: mapped.email,
+        });
+        updated++;
+      } else {
+        await INSERT.into(Suppliers).entries({ ID: cds.utils.uuid(), ...mapped });
+        created++;
+      }
+    }
+
+    return { destination: destination.Name, totalRecords: legacyRecords.length, created, updated, skipped, errors };
   });
 });
