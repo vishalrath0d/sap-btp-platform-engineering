@@ -1,22 +1,37 @@
-name: terraform apply (dev)
+name: terraform apply
 
 # Deliberately workflow_dispatch-only (manual trigger), never on push -
 # this project's instruction is "build it, don't deploy yet, test locally
-# first, deploy after review." Also gated behind the `dev` GitHub
+# first, deploy after review." Also gated behind a per-environment GitHub
 # Environment, which can (and should, before this is ever really used)
 # have required reviewers configured - two independent gates, not one,
 # before any real infrastructure changes.
+#
+# environment choice mirrors the real sm-infraforge/langfuse Jenkinsfile's
+# `environmentChoices` pattern (setPipeline(..., environmentChoices:
+# ENVIRONMENTS)) - one pipeline/workflow, environment selected at trigger
+# time, not one workflow file per environment.
 
 on:
   workflow_dispatch:
     inputs:
+      environment:
+        description: "Which environment to apply"
+        required: true
+        type: choice
+        options:
+          - dev
+          # qa and prod are listed as options for when they're real - see
+          # environments/qa|prod/terraform.tfvars for why they'd fail today
+          - qa
+          - prod
       confirm:
-        description: 'Type "apply" to confirm you intend to run this against the real BTP trial subaccount'
+        description: 'Type "apply" to confirm you intend to run this against the real BTP account'
         required: true
 
 defaults:
   run:
-    working-directory: infra/terraform/environments/dev
+    working-directory: infra/terraform
 
 permissions:
   contents: read
@@ -24,8 +39,9 @@ permissions:
 jobs:
   apply:
     runs-on: ubuntu-latest
-    environment: dev # configure required reviewers on this GitHub Environment
-                       # before this job can ever actually run for real
+    environment: ${{ github.event.inputs.environment }} # configure required reviewers on
+                                                            # each GitHub Environment (dev/qa/prod)
+                                                            # before this job can ever run for real
     steps:
       - name: Verify confirmation input
         if: github.event.inputs.confirm != 'apply'
@@ -40,7 +56,10 @@ jobs:
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 
       - name: terraform init
-        run: terraform init
+        run: |
+          terraform init \
+            -backend-config="organization=${{ secrets.TF_CLOUD_ORGANIZATION }}" \
+            -backend-config="workspaces.name=procureiq-${{ github.event.inputs.environment }}"
 
       - name: terraform apply
-        run: terraform apply -auto-approve -input=false
+        run: terraform apply -auto-approve -input=false -var-file="environments/${{ github.event.inputs.environment }}/terraform.tfvars"

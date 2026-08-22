@@ -11,9 +11,17 @@ on:
       - "infra/terraform/**"
       - ".github/workflows/terraform-plan.yml"
 
+env:
+  # One shared root module (infra/terraform/) for every environment - this
+  # workflow only ever varies TF_ENVIRONMENT and which -var-file/
+  # -backend-config it passes, never the working directory or the .tf
+  # files themselves. See infra/terraform/README.md for why.
+  TF_ENVIRONMENT: dev
+  TF_WORKSPACE_NAME: procureiq-dev
+
 defaults:
   run:
-    working-directory: infra/terraform/environments/dev
+    working-directory: infra/terraform
 
 permissions:
   contents: read
@@ -27,24 +35,27 @@ jobs:
 
       - uses: hashicorp/setup-terraform@v3
         with:
-          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }} # HCP Terraform API token - see infra/terraform/environments/dev/README.md
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }} # HCP Terraform API token - see infra/terraform/README.md
 
       - name: terraform fmt -check
-        run: terraform fmt -check -recursive ../../
+        run: terraform fmt -check -recursive .
 
       - name: terraform init
-        run: terraform init
+        run: |
+          terraform init \
+            -backend-config="organization=${{ secrets.TF_CLOUD_ORGANIZATION }}" \
+            -backend-config="workspaces.name=${{ env.TF_WORKSPACE_NAME }}"
 
       - name: terraform plan
         id: plan
-        run: terraform plan -no-color -input=false
+        run: terraform plan -no-color -input=false -var-file="environments/${{ env.TF_ENVIRONMENT }}/terraform.tfvars"
         continue-on-error: true
 
       - name: Post plan as PR comment
         uses: actions/github-script@v7
         with:
           script: |
-            const output = `#### Terraform Plan (dev)
+            const output = `#### Terraform Plan (${{ env.TF_ENVIRONMENT }})
             \`\`\`
             ${{ steps.plan.outputs.stdout }}
             \`\`\``;
