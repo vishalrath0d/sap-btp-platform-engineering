@@ -27,22 +27,32 @@ module "cloudfoundry_env" {
   # (true for this trial - confirmed `cf delete-org` fails, "not
   # authorized"), creates one with these values if none exists (true for
   # a fresh/real subaccount). See modules/cloudfoundry-env/main.tf.
+  #
+  # Deliberately NO `depends_on = [module.entitlements]` here anymore - a
+  # real Terraform constraint, not an oversight: this module's `count` is
+  # driven by a data-source lookup, and `depends_on` on a module forces
+  # everything inside it (including data sources that would otherwise
+  # resolve during plan) to defer to apply-time - which then makes `count`
+  # un-computable during plan ("depends on resource attributes that cannot
+  # be determined until apply"), a real error hit on this exact PR.
+  # Practical implication, not hidden: on a genuinely fresh subaccount
+  # with zero entitlements yet, the very first `apply` might need to run
+  # twice (once to grant entitlements, once more to create the
+  # environments) - the same kind of two-phase reality
+  # modules/role-collections already documents for XSUAA, not a new problem.
   source          = "./modules/cloudfoundry-env"
   subaccount_id   = module.subaccount.id
   org_name        = "procureiq-${var.environment}"
   landscape_label = "cf-${var.region}"
-
-  depends_on = [module.entitlements]
 }
 
 module "kyma_env" {
+  # See cloudfoundry_env's comment above - same reasoning, same fix.
   source         = "./modules/kyma-env"
   subaccount_id  = module.subaccount.id
   name           = "procureiq-kyma-${var.environment}"
   plan_name      = "trial"
   administrators = var.kyma_administrators
-
-  depends_on = [module.entitlements]
 }
 
 module "xsuaa" {
