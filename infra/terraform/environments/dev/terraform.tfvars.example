@@ -1,0 +1,12 @@
+# Copy to terraform.tfvars (gitignored) for local `terraform plan` runs, or
+# set the equivalents as HCP Terraform workspace variables (preferred for
+# the GitHub-Actions-apply path - see this folder's README).
+
+globalaccount_subdomain = "CHANGE_ME"
+subaccount_subdomain    = "4cbf0c12trial-ga"
+region                  = "us10"
+kyma_administrators     = ["you@example.com"]
+
+# btp_username / btp_password: intentionally NOT here even as placeholders.
+# Set as HCP Terraform workspace variables (marked sensitive) or
+# TF_VAR_btp_username / TF_VAR_btp_password locally - never in a committed file.
