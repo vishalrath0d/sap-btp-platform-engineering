@@ -123,6 +123,27 @@ happy-path submit→reject, RBAC enforcement (a Requester cannot call `approve`)
 and business-rule guards (can't submit a non-DRAFT requisition, can't approve
 twice, can't reject without a comment).
 
+## Connectivity: syncing suppliers from a "legacy" on-prem system
+
+`syncLegacySuppliers` (requires the `IntegrationAdmin` role) pulls supplier
+records from `services/legacy-erp-gateway` through a Destination-service-
+shaped connectivity layer (`srv/lib/destination.js`) that simulates the
+Cloud Connector boundary a real on-prem integration would need — see
+`docs/concepts/11-connectivity-cloud-connector.md` for the full story and a
+sequence diagram.
+
+```bash
+# needs legacy-erp-gateway running on :4007 (see that service's README)
+curl -u dave: -X POST http://localhost:4004/procurement/syncLegacySuppliers \
+  -H 'Content-Type: application/json' -d '{}'
+```
+
+Verified live: first run created 5 suppliers from the legacy mock data with
+correctly mapped risk ratings/statuses; re-running the identical sync
+produced 0 creates / 5 updates (idempotent, matched on `externalId` +
+`sourceSystem`); `alice` (`Requester` role) got a real `403` attempting the
+same call.
+
 ## Known limitations (honesty notes, not hidden)
 
 - **Document numbering (`PR-00001`, `PO-00001`) is `count(*)`-based** (`srv/lib/sequence.js`) —
