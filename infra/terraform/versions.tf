@@ -1,11 +1,11 @@
 terraform {
   required_version = ">= 1.6" # matches what's actually been used to init/validate
-                                # this module throughout (tfenv-managed 1.6.0 locally).
-                                # The workspace's own "Terraform v1.15.9" setting in the
-                                # HCP UI doesn't bind us here - that setting only matters
-                                # for HCP Terraform's own remote execution, and this
-                                # workspace uses Local execution mode (GitHub Actions runs
-                                # the actual CLI), so it never applies.
+  # this module throughout (tfenv-managed 1.6.0 locally).
+  # The workspace's own "Terraform v1.15.9" setting in the
+  # HCP UI doesn't bind us here - that setting only matters
+  # for HCP Terraform's own remote execution, and this
+  # workspace uses Local execution mode (GitHub Actions runs
+  # the actual CLI), so it never applies.
 
   # Deliberately empty: organization and workspace name are supplied via
   # TF_CLOUD_ORGANIZATION and TF_WORKSPACE environment variables instead
@@ -33,8 +33,8 @@ terraform {
     btp = {
       source  = "SAP/btp"
       version = "~> 1.26" # pinned to what was actually downloaded and
-                            # schema-checked against while building this
-                            # module (v1.26.0) - bump deliberately.
+      # schema-checked against while building this
+      # module (v1.26.0) - bump deliberately.
     }
   }
 }
