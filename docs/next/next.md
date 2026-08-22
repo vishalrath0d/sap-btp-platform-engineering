@@ -1,6 +1,58 @@
 # Continuity notes — read this at the start of every session
 
-Last updated: 2026-08-22 (end of session 2 — local-buildable scope complete)
+Last updated: 2026-08-22 (end of session 3 — comprehensiveness gap-check + connectivity)
+
+## Session 3 additions (read PROJECT_CHARTER.md's "Scope expansion" section first)
+
+Vishal compared this project to `ai-ml-llm-ops` and judged it thin. Researched
+SAP's own Learning Journeys + real job postings rather than guessing — full
+gap analysis lives in the charter now, plus `docs/concepts/00-scope-boundaries.md`
+(explicit, reasoned out-of-scope list — read this, it prevents re-litigating
+"why isn't X covered" from scratch).
+
+**Built this session**: `services/legacy-erp-gateway` (mock on-prem legacy
+supplier system) + `procurement-core`'s `syncLegacySuppliers` action, a
+Destination-service-shaped connectivity simulation of the Cloud Connector
+boundary — the single starkest gap the research found. Verified live:
+idempotent sync (5 created → re-run → 5 updated, 0 created), RBAC-gated via
+a new `IntegrationAdmin` role. See `docs/concepts/11-connectivity-cloud-connector.md`.
+
+**Now 4 services, 43/43 tests passing, 22 staged commits.**
+
+## Backlog from the session-3 gap analysis (not yet built — prioritize next)
+
+Still locally-buildable (no BTP account needed), roughly in priority order:
+1. **Multitenancy/MTX** (`@sap/cds-mtxs`) — core official CAP documentation
+   territory, currently entirely absent. Concept doc
+   `12-multitenancy-and-saas.md` not started.
+2. **SAP Feature Flags service (simulated)** — toggle `spend-anomaly-
+   detector`'s rule set or `ai-copilot`'s retrieval mode, document a
+   before/after. Cheap, concrete.
+3. **SAP Alert Notification Service + Job Scheduling Service** — wire a
+   scheduled re-scan into `spend-anomaly-detector` emitting ANS-shaped
+   events on HIGH-severity findings.
+4. **SAP API Management / API Business Hub-style catalog** in front of
+   `procurement-core`'s OData service.
+5. **SAP Document Management Service (simulated)** — replace `ai-copilot`'s
+   flat corpus files with a documented BTP-native document store
+   abstraction (same pattern as `destination.js` — a seam, not a full
+   product).
+6. **SAP Workflow Management (BPMN) design note** — a documented
+   alternative approval-routing design for `procurement-core`, contrasted
+   with the current in-code threshold routing. Doc-only, no new service
+   needed unless it turns out cheap to actually build.
+7. **`docs/concepts/13-cloud-alm-and-operations-services.md`** and
+   **`14-sap-activate-methodology.md`** — both can be written now (theory +
+   mapping onto the existing phased roadmap), don't need the account.
+8. **`docs/operations/fiori-launchpad-administration.md`** — short note,
+   cheap.
+9. Remaining original concept docs still not written: `02` (extensibility/
+   Clean Core), `04` (ABAP Cloud/RAP), `05` (security/XSUAA — note this now
+   also needs a Destination/Cloud Connector cross-reference to `11`), `06`
+   (integration patterns), `07` (HANA Cloud), `08` (DevOps toolchain), `09`
+   (AI on BTP), `10` (FinOps/licensing).
+
+## Where things stand (services)
 
 ## Where things stand
 
