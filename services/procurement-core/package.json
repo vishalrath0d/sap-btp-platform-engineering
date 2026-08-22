@@ -15,6 +15,8 @@
   "dependencies": {
     "@sap/cds": "^9",
     "@cap-js/sqlite": "^2",
+    "@cap-js/hana": "^2",
+    "@sap/xssec": "^4",
     "express": "^4"
   },
   "devDependencies": {
@@ -63,6 +65,14 @@
           "credentials": {
             "url": ":memory:"
           }
+        }
+      },
+      "[production]": {
+        "db": {
+          "kind": "hana"
+        },
+        "auth": {
+          "kind": "xsuaa"
         }
       }
     }

@@ -16,3 +16,4 @@ default-env.json
 *.tfvars
 !*.tfvars.example
 alerts.jsonl
+mta_archives/

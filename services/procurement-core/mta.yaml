@@ -1,0 +1,71 @@
+_schema-version: "3.3"
+ID: procurement-core
+version: 0.1.0
+description: "ProcureIQ procurement-core - Purchase Requisition to Purchase Order workflow, packaged as a Multi-Target Application for Cloud Foundry deployment."
+
+parameters:
+  enable-parallel-deployments: true
+
+# The standard CAP+MTA pattern: `cds build --production` compiles the CDS
+# model and produces gen/srv + gen/db BEFORE mbt validates module paths -
+# those directories don't exist until this hook runs, so modules below
+# point at gen/srv and gen/db, not the source tree directly.
+build-parameters:
+  before-all:
+    - builder: custom
+      commands:
+        - npm install --include=dev
+        - npx cds build --production
+
+modules:
+  - name: procurement-core-srv
+    type: nodejs
+    path: gen/srv
+    parameters:
+      buildpack: nodejs_buildpack
+      memory: 256M
+      disk-quota: 512M
+    build-parameters:
+      builder: npm
+      ignore:
+        - node_modules/
+    provides:
+      - name: procurement-core-api
+        properties:
+          srv-url: ${default-url}
+    requires:
+      - name: procurement-core-db
+      - name: procurement-core-xsuaa
+
+  # The HDI deployer: pushes db/schema.cds's compiled HDI artifacts
+  # (gen/db) into the HANA Cloud HDI container on every deploy. Without
+  # this module, procurement-core-srv would bind to an empty HDI container
+  # - schema.cds's tables would never actually get created in HANA.
+  - name: procurement-core-db-deployer
+    type: hdb
+    path: gen/db
+    parameters:
+      buildpack: nodejs_buildpack
+      memory: 256M
+    build-parameters:
+      ignore:
+        - node_modules/
+    requires:
+      - name: procurement-core-db
+
+resources:
+  - name: procurement-core-db
+    type: com.sap.xs.hdi-container
+    parameters:
+      service: hana-cloud-trial
+      service-plan: hdi-shared
+
+  - name: procurement-core-xsuaa
+    type: org.cloudfoundry.managed-service
+    parameters:
+      service: xsuaa
+      service-plan: application
+      path: ./xs-security.json
+    # existing-service (not managed-service) would be used instead if a
+    # single shared XSUAA instance were bound across multiple MTA modules -
+    # not the case here, procurement-core owns its own XSUAA instance.
