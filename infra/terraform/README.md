@@ -34,30 +34,35 @@ out of sync over time. Fixed to mirror the real, working pattern from
 `sm-infraforge/langfuse` (checked directly, not assumed): one shared root
 module, environment folders holding *only* a `terraform.tfvars`.
 
-## State isolation: one shared backend, parameterized per environment
+## State isolation: one shared config, one HCP Terraform workspace per environment
 
-`versions.tf`'s `backend "remote"` block is a **template**, not real
-config — CI overrides `organization`/`workspaces.name` via
-`-backend-config` flags at `terraform init` time. This mirrors exactly
-what the reference project does with its S3 backend (`backend.tf` is a
-placeholder there too; Jenkins's `terraformInit.groovy` supplies the real
-`bucket`/`key`/`region` per environment, with `key =
-"{project}/{environment}/terraform.tfstate"`).
+`versions.tf`'s `cloud {}` block is deliberately empty — `organization`
+and `workspaces.name` come from the `TF_CLOUD_ORGANIZATION` and
+`TF_WORKSPACE` environment variables instead (confirmed against
+HashiCorp's own docs: when a `cloud` block argument is omitted, Terraform
+reads the matching env var; the workspace must already exist). CI sets
+these per job, so the exact same `.tf` files serve every environment.
 
-The one real difference, worth being explicit about since it doesn't map
-1:1: **HCP Terraform's state-isolation unit is a workspace**, not a key
-inside one shared workspace the way S3 works — there's no "one workspace,
-many key-namespaced state files" option in HCP Terraform the way there is
-in S3. So `dev`/`qa`/`prod` become **three separate HCP Terraform
+Worth being explicit about since it doesn't map 1:1 onto the reference
+project's S3-backend pattern: **HCP Terraform's state-isolation unit is a
+workspace**, not a key inside one shared workspace the way S3 works —
+there's no "one workspace, many key-namespaced state files" option in HCP
+Terraform. So `dev`/`qa`/`prod` become **three separate HCP Terraform
 workspaces** — `procureiq-dev`, `procureiq-qa`, `procureiq-prod` — each
-with its own state, each fed by the matching `environments/<env>/
-terraform.tfvars` plus its own `btp_username`/`btp_password`/
-`xsuaa_xsappname` workspace variables. `procureiq` is the project-name
-prefix (the `PROJECT` value in the reference project's Jenkinsfile),
-`-<env>` is the per-environment suffix — you do need to create all three
-workspaces in HCP Terraform up front (or just `dev` for now, add
-`qa`/`prod` when there's a real landscape to point them at), there's no
-way to get one workspace to transparently hold three environments' state.
+with its own state. `procureiq` is the project-name prefix (the same role
+`PROJECT` plays in the reference project's Jenkinsfile), `-<env>` is the
+per-environment suffix. You need to create each workspace in HCP Terraform
+up front (just `dev` for now is fine — add `qa`/`prod` when there's a
+real landscape to point them at).
+
+**Each workspace's Execution Mode must be "Local"** — this means HCP
+Terraform only stores state; GitHub Actions runs the actual `plan`/
+`apply`. One consequence worth knowing before it's confusing: **Local-
+execution-mode workspaces don't have a Variables tab at all** — HCP
+Terraform doesn't evaluate workspace variables for local runs. Credentials
+have to reach the Terraform CLI directly as `TF_VAR_*` environment
+variables from wherever the CLI actually runs (GitHub Actions) — see the
+next section.
 
 ## Why GitHub Actions, not local `apply`
 
@@ -73,21 +78,29 @@ GitHub Environment (which can require reviewer approval) — never
 automatically on push, matching this project's "deploy after review"
 instruction.
 
-## Before the first `terraform plan`
+## Before the first `terraform plan` — GitHub Actions secrets needed
 
-1. Create a free [HCP Terraform](https://app.terraform.io) account + an
-   organization, then a `procureiq-dev` workspace (execution mode:
-   "Local" — GitHub Actions runs `plan`/`apply`, not HCP Terraform's own
-   remote execution).
-2. In that workspace, add `btp_username` and `btp_password` as
-   **sensitive Terraform variables** (not environment variables).
-3. Set `TF_API_TOKEN` (an HCP Terraform API token) as a GitHub Actions
-   secret, and put the real organization name in `versions.tf` — or,
-   better, pass it via `-backend-config` in the workflow alongside
-   `workspaces.name`, so `versions.tf` never needs a real value hardcoded
-   at all.
-4. Confirm the subaccount's exact region and global account subdomain in
-   the BTP cockpit; update `environments/dev/terraform.tfvars`.
+All five set on the GitHub repo (Settings → Secrets and variables →
+Actions), never in a committed file:
+
+| Secret | Value |
+|---|---|
+| `TF_API_TOKEN` | An HCP Terraform API token (User Settings → Tokens) |
+| `TF_CLOUD_ORGANIZATION` | Your HCP Terraform org name (e.g. `vishalrath0d-tf-org`) |
+| `BTP_USERNAME` | SAP Universal ID used to log into the BTP trial |
+| `BTP_PASSWORD` | Its password |
+| `XSUAA_XSAPPNAME` | Leave unset until the two-phase apply below reaches step 2 |
+
+Plus, in HCP Terraform itself: create the `procureiq-dev` workspace via
+the **CLI-Driven Workflow** (not "Version control" — that would have HCP
+Terraform trigger its own runs from the repo, duplicating what GitHub
+Actions already does; not "API-Driven" either, since the CLI via
+`hashicorp/setup-terraform` is what's actually driving this), then set
+its **Execution Mode to Local** in Settings → General.
+
+Also confirm the subaccount's exact region and global account subdomain
+in the BTP cockpit; update `environments/dev/terraform.tfvars` if they
+differ from what's there.
 
 ## Two-phase apply for XSUAA role collections
 
@@ -97,8 +110,9 @@ instruction.
    still null.
 2. Read the real xsappname: `terraform output -json xsuaa_credentials`
    (sensitive — don't paste it anywhere public) and extract `xsappname`.
-3. Set `xsuaa_xsappname` as an HCP Terraform workspace variable, apply
-   again — now `role_collections` actually creates the three collections.
+3. Set it as the `XSUAA_XSAPPNAME` GitHub secret, wire it into
+   `terraform-apply.yml` as `TF_VAR_xsuaa_xsappname`, apply again — now
+   `role_collections` actually creates the three collections.
 
 ## What's verified vs. what needs a live account to verify
 
