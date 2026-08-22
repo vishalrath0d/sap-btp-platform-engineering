@@ -1,84 +1,108 @@
 # Continuity notes — read this at the start of every session
 
-Last updated: 2026-08-22 (end of first build session)
+Last updated: 2026-08-22 (end of session 2 — local-buildable scope complete)
 
 ## Where things stand
 
-- **`services/procurement-core` is real and working**: CAP/Node.js, CDS domain
-  model (Suppliers, PurchaseRequisitions[+Items], Approvals, PurchaseOrders[+Items]),
-  full submit→approve/reject workflow with threshold-based approval routing,
-  RBAC via mocked auth, 9/9 Jest tests passing. Runs on SQLite, no BTP account
-  needed. See `services/procurement-core/README.md` for exact run commands and
-  documented limitations.
-- Two real CAP framework gotchas found and fixed (both documented in that
-  service's README and in `docs/concepts/03-cap-programming-model.md`):
-  action name `reject` collides with `ApplicationService` base class; impl
-  file must match the `.cds` file's basename (`service.js` for `service.cds`),
-  not the service name.
-- One real host-environment issue found and fixed: broken/stale libc++ headers
-  in this Mac's Command Line Tools install, breaking any native npm module
-  build (`better-sqlite3` in this case). Workaround documented in
-  `docs/references/macos-native-build-toolchain.md` — **the CXXFLAGS/CPPFLAGS
-  env vars in that doc need to be exported before any future `npm install`
-  that involves native modules on this machine**, until the real fix (Xcode
-  CLT reinstall, needs sudo + user's call) happens.
-- Concept docs written so far: `01-sap-btp-fundamentals.md` (general BTP
-  orientation), `03-cap-programming-model.md` (grounded in the actual
-  procurement-core code). Still to write: 02 (extensibility/Clean Core),
-  04-10 per the charter's coverage map — write each once the code it
-  describes exists, not before.
-- Local dev tool inventory confirmed already present on this machine (no setup
-  needed): Node 20.19.4, `@sap/cds-dk` 9.8.4, Java 17, Docker (daemon started),
-  `cf` CLI 8.18, `btp` CLI 2.106.1, Eclipse.app **with ADT plugins already
-  installed**, `mbt` 1.2.45, Terraform 1.6.0, Python 3.9.15.
-- No BTP account exists yet — still Vishal's action item. Not blocking further
-  local-only work.
-- Git: clean, staged commits per logical unit (schema+service, tests, docs,
-  toolchain note) — keep doing this every session, user explicitly asked for
-  visible incremental commit history as a credibility signal.
+**Three real, tested, cross-integrated services, all running locally, zero BTP account needed:**
 
-## Immediate next steps
+1. **`services/procurement-core`** (CAP/Node.js, port 4004) — Requisition →
+   Approval → PO workflow, RBAC, 9/9 tests. Now also has a real **SAP Fiori
+   Elements UI** (`srv/service-ui.cds`, zero hand-written frontend code,
+   served at `/$fiori-preview/ProcurementService/PurchaseRequisitions`) and
+   **publishes a `PurchaseOrderCreated` event** (`srv/lib/events.js`) on
+   every `approve()`.
+2. **`services/ai-copilot`** (port 4005) — RAG over 5 procurement policy/
+   contract documents via Ollama (`all-minilm` embeddings, `qwen2.5:1.5b`
+   generation — upgraded from 0.5b after a documented synthesis-quality
+   finding), a local Langfuse-shaped tracer (real Langfuse deferred — this
+   machine's Docker only has 3.8GB RAM allocated), 11/11 tests (6 unit +
+   5 live against real Ollama).
+3. **`services/spend-anomaly-detector`** (port 4006) — receives the
+   `PurchaseOrderCreated` event via HTTP webhook (stands in for a real Kyma/
+   Event Mesh subscription), evaluates 4 deterministic rules, 13/13 tests.
+   **Verified live, cross-service, end-to-end**: approving a normal PO
+   produces a `NONE`-severity review; approving a $65k PO against a
+   HIGH-risk supplier correctly produces `HIGH` severity with all 3
+   expected flags.
 
-1. **Supplier referential-integrity check** flagged as a known gap in
-   procurement-core's README — worth closing before moving on, or explicitly
-   deferring to a "v-next" list if we move to the next service instead.
-2. **`services/supplier-master-abap`** (Phase 3 originally, but ABAP work
-   needs a live BTP ABAP Environment — there's no local ABAP Cloud runtime).
-   Options when picking this back up: (a) wait for the trial account and do
-   this against the real ABAP Environment trial instance via Eclipse+ADT
-   (already installed), or (b) start with `infra/terraform` instead since
-   that also needs the account. Given "local first" instruction, consider
-   pulling forward something else local-only next: `services/ai-copilot`'s
-   RAG piece can be built and tested fully locally (Chroma or similar +
-   Ollama + Langfuse, all local/Docker) before any BTP account exists —
-   likely the better next target than waiting on ABAP/Terraform.
-3. Once BTP trial account details arrive from Vishal (region + subdomain):
-   unblocks `infra/terraform`, real HANA Cloud, real XSUAA, Kyma, and ABAP
-   Environment work.
+**16 staged git commits**, clean history, each with a real rationale — keep
+this pattern going.
 
-## Standing instructions from the user (2026-08-22 session)
+Concept docs written: `01-sap-btp-fundamentals.md`, `03-cap-programming-model.md`.
+Reference doc: `docs/references/macos-native-build-toolchain.md` (the broken
+CLT headers issue — **the CXXFLAGS/CPPFLAGS workaround in that doc is still
+needed for any future native `npm install` on this machine**).
 
-- Local-first: everything must be runnable and testable locally before any
-  BTP deployment is attempted. Write real code — don't describe/scaffold
-  without running it.
-- Set up any required tooling proactively (turned out to already be
-  installed here — verify before reinstalling anything).
-- Keep writing concept docs as we build, referencing the actual code where
-  possible (not a hard requirement, but preferred).
-- README + inline docs carry the setup/run instructions — no separate
-  cmds/setup doc needed beyond that.
-- Cover the **whole** SAP domain, production-grade, full capstone scope —
-  do not quietly scale down to an MVP.
-- Commit in clear phases/stages throughout, not one giant commit at the end.
-- Don't do anything destructive to the host system (e.g. no `sudo rm -rf
-  CommandLineTools` without asking) — workarounds instead, documented.
-- After this project ships, a DevOps-domain-wide project is planned next —
-  not started.
+To run everything locally: see each service's README for exact commands.
+Quick version — `ollama serve` (if not running) with `all-minilm` and
+`qwen2.5:1.5b` pulled, then `npm start` in `ai-copilot` and
+`spend-anomaly-detector`, and `cds deploy && cds-serve` in `procurement-core`.
+
+## What's now genuinely blocked on the BTP account
+
+Everything left in the charter's domain coverage map needs a live BTP
+subaccount to build *and verify* — writing untested Terraform/Jenkinsfile/
+ABAP source now would break this project's whole "verified, not
+aspirational" standard, so it wasn't done speculatively:
+
+- **`infra/terraform`** — needs real subaccount/region/entitlements to
+  `plan`/`apply` against (syntax-only `validate` is possible without an
+  account but wasn't worth doing in isolation from real values).
+- **`services/supplier-master-abap`** — ABAP Cloud/RAP has no local runtime
+  at all; needs a live BTP ABAP Environment (trial or otherwise) reachable
+  from Eclipse+ADT (already installed on this machine).
+- **`ci-cd/piper`, `ci-cd/sap-cicd-service`** — Project Piper and the managed
+  CI/CD service both need a real Cloud Foundry target to deploy to; `ci-cd/
+  github-actions` similarly needs real deployment credentials to be more
+  than an unverified YAML file. Note: `cds add pipeline` and `cds add
+  github-actions` exist as scaffolding commands in this cds-dk version —
+  worth using once there's a real target to point them at, rather than
+  hand-writing from scratch.
+- **`transport/cloud-transport-management`** — CTMS nodes/routes are BTP
+  service configuration, meaningless without real subaccounts to promote
+  between.
+- **`services/integration-flow`** — Integration Suite's Cloud Integration
+  designer is a cloud-only tool; no local iFlow authoring/testing exists.
+- **Real Langfuse** (vs. the local tracer shim) and **SAP AI Core/Generative
+  AI Hub** (vs. Ollama) — both explicitly deferred, AI Core specifically
+  needs BTP free-tier (not the plain trial), see `PROJECT_CHARTER.md`.
+
+## Immediate next steps once account details arrive
+
+1. Get subaccount region + subdomain + entitlements available on the trial.
+2. `infra/terraform` first — provisioning the landing zone unblocks
+   everything else (real HANA Cloud, real XSUAA, Kyma, ABAP Environment).
+3. Deploy `procurement-core` for real (`cds add mta` or `cf-manifest`, then
+   `cf push`/`cf deploy`) — swap mocked auth for real XSUAA, verify the
+   Fiori preview still works against a real deployed OData service.
+4. `services/supplier-master-abap` via Eclipse+ADT against the real ABAP
+   Environment, gCTS-connected to this same GitHub repo.
+5. Wire up real Piper/GitHub Actions CI/CD against the real CF target.
+6. `transport/cloud-transport-management` for Dev→QA→Prod promotion.
+7. `services/integration-flow`.
+8. Revisit AI layer: real Langfuse (once Docker has more RAM, or accept the
+   footprint) and/or SAP AI Core (once free-tier is enabled).
+
+## Standing instructions from the user (carried over, still apply)
+
+- Local-first, real code, real tests — not description/scaffolding without
+  running it. Continue this for whatever remains locally buildable.
+- Tool setup proactive (verify what's installed before installing more —
+  this machine already has the full SAP toolchain).
+- Concept docs alongside the code that grounds them, not before.
+- README + inline docs carry setup/run instructions.
+- Full capstone scope, not a quietly-scaled-down MVP.
+- Commit in clear phases/stages throughout.
+- No destructive host changes without asking.
+- A DevOps-domain-wide project is planned next, after this one ships — not
+  started.
+- User said: "build the full app and at the end ask me account details" —
+  this is that end point for the locally-buildable scope. Everything after
+  this genuinely needs the account, not a judgment call to keep deferring.
 
 ## Things NOT to do (carried over, still applies)
 
-- Do not reuse or reference `career/03-sap/leverx/projects/demo-phase-3` /
-  `demo-phase-4` as a foundation — it's a toy, explicitly excluded.
-- Do not frame this project around any specific interview/interviewer —
-  Vishal already has the EY-GDS offer; this is a general domain-mastery
-  showcase, not interview prep.
+- Do not reuse `career/03-sap/leverx/projects/demo-phase-3`/`demo-phase-4`
+  as a foundation.
+- Do not frame this project around any specific interview/interviewer.
