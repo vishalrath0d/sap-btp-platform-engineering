@@ -6,6 +6,7 @@ node_modules/
 gen/
 db.sqlite*
 traces.jsonl
+anomalies.jsonl
 *.mtar
 .cds-services.json
 default-env.json
