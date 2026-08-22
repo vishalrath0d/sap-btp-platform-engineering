@@ -1,0 +1,105 @@
+name: procurement-core CI
+
+# GitHub Actions must live at the repo root (.github/workflows/) - GitHub
+# doesn't discover workflows anywhere else, unlike Piper's .pipeline/config.yml
+# which lives with the app it builds. path filter below scopes this
+# workflow to procurement-core changes only, since this is a monorepo with
+# multiple services, each expected to get its own workflow file.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/procurement-core/**"
+      - ".github/workflows/procurement-core-ci.yml"
+  pull_request:
+    paths:
+      - "services/procurement-core/**"
+
+defaults:
+  run:
+    working-directory: services/procurement-core
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: services/procurement-core/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  build-mta:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Cloud MTA Build Tool
+        run: npm install -g mbt
+
+      - name: cds build --production
+        run: |
+          npm ci
+          npx cds build --production
+
+      - name: mbt build
+        run: mbt build --platform cf
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: procurement-core-mtar
+          path: services/procurement-core/mta_archives/*.mtar
+          retention-days: 14
+
+  # Deploy is intentionally NOT wired to run automatically yet - this
+  # project's account strategy (PROJECT_CHARTER.md) is build-first,
+  # deploy-after-review. The job below is real and complete, gated behind
+  # a GitHub Environment requiring manual approval, so turning on real
+  # deployment later is a repo-settings change (add the environment's
+  # required reviewers), not a rewrite of this workflow.
+  deploy-dev:
+    needs: build-mta
+    runs-on: ubuntu-latest
+    environment: dev # configure this GitHub Environment with required
+                       # reviewers before this job can ever actually run
+    if: false # remove once ready to deploy for real - see the note above
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: procurement-core-mtar
+          path: .
+
+      - name: Install cf CLI + multiapps plugin
+        run: |
+          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
+          sudo mv cf8 /usr/local/bin/cf
+          cf install-plugin -f multiapps
+
+      - name: cf login
+        env:
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+        run: |
+          cf api https://api.cf.us10.hana.ondemand.com
+          cf auth "$CF_USERNAME" "$CF_PASSWORD"
+          cf target -o procureiq-dev -s dev
+
+      - name: cf deploy
+        run: |
+          cf deploy services/procurement-core/mta_archives/*.mtar \
+            -e services/procurement-core/mtaext-dev.mtaext \
+            --no-confirm
