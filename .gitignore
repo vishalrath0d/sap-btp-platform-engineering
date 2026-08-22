@@ -5,6 +5,7 @@ node_modules/
 .DS_Store
 gen/
 db.sqlite*
+traces.jsonl
 *.mtar
 .cds-services.json
 default-env.json
