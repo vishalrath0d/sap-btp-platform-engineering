@@ -84,6 +84,34 @@ curl -u bob: -X POST \
   -H 'Content-Type: application/json' -d '{"comment":"Approved within budget"}'
 ```
 
+### The UI: SAP Fiori Elements, generated from annotations
+
+`srv/service-ui.cds` adds standard SAP Fiori Elements annotations
+(`UI.LineItem`, `UI.HeaderInfo`, `UI.SelectionFields`, `UI.Facets`) to the
+service — kept in its own file, separate from the API contract in
+`service.cds`, which is the normal CAP convention once a project has real UI
+annotations. This generates a full List Report + Object Page UI with **zero
+hand-written HTML/JS**, served locally at:
+
+```
+http://localhost:4004/$fiori-preview/ProcurementService/PurchaseRequisitions
+```
+
+(the running server's `/` index page links to a preview for every entity).
+Verified: returns real `sap.fe`/UI5-bootstrapped HTML, not a stub. Requisition
+status is annotated with `Criticality` so DRAFT shows neutral, SUBMITTED
+shows critical/orange, CONVERTED shows positive/green, REJECTED shows
+negative/red in the generated list — computed server-side
+(`statusCriticality` in `service-ui.cds`) rather than hardcoded in a UI
+layer, so it stays correct if the workflow states ever change.
+
+A standalone, deployable Fiori Elements app (its own `webapp/` folder +
+`manifest.json`, packaged for BTP's HTML5 Application Repository) is a
+documented next step once actually deploying — that needs the Fiori
+Elements Yeoman generator or SAP's Fiori tools VS Code extension, neither of
+which run in this headless environment. Everything the annotations describe
+here carries over unchanged to that generated app.
+
 ### Run the tests
 
 ```bash
