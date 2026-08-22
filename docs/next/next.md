@@ -15,27 +15,62 @@ module/environment conventions with CI-driven apply.**
 4. `legacy-erp-gateway` (2/2) — mock on-prem system
 5. **`api-gateway`** (16/16, new this session) — API Management simulation: API keys, rate limiting, API Business Hub-style catalog. Verified live end-to-end (client → gateway → procurement-core → legacy-erp-gateway, full chain, real data). **Found and fixed two real bugs in the process** — an empty-body-forwarding bug in the gateway itself, and a more serious one: an unhandled `fetch()` rejection in `procurement-core/srv/service.js`'s `syncLegacySuppliers` handler that **crashed the entire server process** when the legacy system was unreachable. Both fixed and verified.
 
-### Infrastructure — restructured this session per explicit user feedback
-`infra/terraform` was flat (all `.tf` files in one directory) — corrected
-to real conventions: `modules/` (7 reusable modules: subaccount,
-entitlements, cloudfoundry-environment, kyma-environment, xsuaa,
-role-collections, destination) + `environments/{dev,qa,prod}` (root
-modules; `dev` is real and validated, `qa`/`prod` are honest stubs — the
-trial only provides one subaccount). Matches the real pattern confirmed
-in `SAP-samples/btp-terraform-samples` AND in Vishal's own real
-`sm-infraforge/langfuse` project (same `modules/`+`environments/` shape
-independently) — strong validation this was the right structure.
+### Infrastructure — structure corrected twice this session, now settled
 
-**Real applying now happens via GitHub Actions, not local `apply`** — per
-explicit user feedback that local apply is bad practice for infra a
-public repo's CI is meant to manage. `.github/workflows/terraform-plan.yml`
-(every PR, posts plan as a comment) and `terraform-apply.yml`
-(workflow_dispatch-only, typed confirmation input, gated behind the `dev`
-GitHub Environment). Needs a free HCP Terraform account + workspace for
-remote state (required for GH-Actions-apply to work at all — runners are
-ephemeral) — see `infra/terraform/environments/dev/README.md`'s setup
-checklist. **Not yet set up** — Vishal needs to create the HCP Terraform
-org/workspace before either workflow can actually run.
+`infra/terraform` went through two real corrections, both from Vishal
+directly comparing against his own real `sm-infraforge/langfuse` project
+rather than accepting a plausible-looking first draft:
+
+1. **Flat → modules/+environments/, files un-duplicated.** First draft
+   wrongly duplicated `main.tf`/`variables.tf`/`outputs.tf`/`provider.tf`/
+   `versions.tf` inside each `environments/<env>/` dir. Corrected to ONE
+   shared set of these files at `infra/terraform/` root, `environments/
+   {dev,qa,prod}/` holding *only* a `terraform.tfvars` each — confirmed
+   directly against `sm-infraforge/langfuse`'s real structure (which does
+   exactly this) before rebuilding. Modules: `subaccount`, `entitlements`,
+   `cloudfoundry-env`, `kyma-env` (both renamed from `-environment` per
+   explicit request), `xsuaa`, `role-collections`, `destination`.
+2. **`backend "remote"` + `-backend-config` → `cloud {}` + env vars.**
+   Vishal actually created the real HCP Terraform workspace
+   (`procureiq-dev`, org `vishalrath0d-tf-org`, CLI-Driven Workflow,
+   Execution Mode: Local) and hit two real things this surfaced: HCP's UI
+   now suggests the `cloud` block over legacy `backend "remote"`, and
+   **Local-execution-mode workspaces have no Variables tab at all** —
+   confirmed against HashiCorp's own docs. `versions.tf`'s `cloud {}` is
+   now deliberately empty; `TF_CLOUD_ORGANIZATION`/`TF_WORKSPACE` env vars
+   (set per-job in the GitHub Actions workflows) supply the real values.
+   Credentials (`btp_username`/`btp_password`/`xsuaa_xsappname`) reach
+   Terraform as `TF_VAR_*` env vars sourced from GitHub Actions secrets
+   (`BTP_USERNAME`, `BTP_PASSWORD`, `XSUAA_XSAPPNAME`), not HCP Terraform
+   workspace variables — that path doesn't exist for Local execution mode.
+   Caught and fixed a real bug this surfaced too: an unset GitHub secret
+   resolves to `""`, not `null` — `role_collections`' safety check now
+   tests both.
+
+**Full audit done at end of session 6**: re-validated the entire module
+tree with **Terraform 1.15.9** (installed via `tfenv`, matching what the
+real HCP workspace expects — not just the 1.6.0 used earlier), zero
+errors. Grepped the whole repo for stale references to the old structure/
+module names/backend approach — found and fixed one (a stale tfvars
+comment still mentioning "HCP Terraform workspace variables").
+
+**Real applying still happens via GitHub Actions, not local `apply`**
+(`.github/workflows/terraform-plan.yml` on every PR,
+`terraform-apply.yml` workflow_dispatch-only with an environment choice
+input and a typed confirmation, gated behind per-environment GitHub
+Environments). **Setup in progress**: HCP Terraform workspace created and
+Execution Mode set to Local ✓. Still needed before `terraform-plan.yml`
+can run for real: the 4 GitHub Actions secrets (`TF_API_TOKEN`,
+`TF_CLOUD_ORGANIZATION`, `BTP_USERNAME`, `BTP_PASSWORD` — `XSUAA_XSAPPNAME`
+deliberately deferred to the two-phase apply's step 2) — Vishal was about
+to push the repo to GitHub specifically to set these when this session's
+transcript ends.
+
+**Open question from this session, not yet decided**: whether to rename
+the repo from `sap-btp-platform-engineering` to something shorter before
+the first push (asked, answered — see git history/session transcript for
+the reasoning — but confirm the final chosen name here once decided,
+since it wasn't resolved by end of session).
 
 ### Documentation — the full backlog from session 4's research is done
 All 15 concept docs (00-14) written, folding in every finding from the
