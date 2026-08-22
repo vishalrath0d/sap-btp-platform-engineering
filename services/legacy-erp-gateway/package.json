@@ -1,0 +1,19 @@
+{
+  "name": "legacy-erp-gateway",
+  "version": "0.1.0",
+  "description": "Mock 'on-prem' legacy supplier master system — a deliberately old-fashioned API (cryptic field names, single-letter codes) that procurement-core reaches through a Destination-service-shaped connectivity abstraction, simulating the Cloud Connector boundary. See procurement-core/README.md for the other half of this story.",
+  "private": true,
+  "type": "commonjs",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "jest --runInBand"
+  },
+  "dependencies": {
+    "express": "^4"
+  },
+  "devDependencies": {
+    "jest": "^29",
+    "supertest": "^7"
+  }
+}

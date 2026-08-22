@@ -1,0 +1,47 @@
+[
+  {
+    "SUPPLIER_ID": "LEG-001",
+    "COMPANY_NAME": "Meridian Fabrication Works",
+    "CTRY_CD": "US",
+    "TAX_REG_NO": "US-TAX-778",
+    "CONTACT_EMAIL": "ap@meridianfab.example",
+    "RISK_CD": "L",
+    "REC_STATUS": "A"
+  },
+  {
+    "SUPPLIER_ID": "LEG-002",
+    "COMPANY_NAME": "Danube Precision Tooling GmbH",
+    "CTRY_CD": "DE",
+    "TAX_REG_NO": "DE-TAX-3391",
+    "CONTACT_EMAIL": "einkauf@danube-tooling.example",
+    "RISK_CD": "M",
+    "REC_STATUS": "A"
+  },
+  {
+    "SUPPLIER_ID": "LEG-003",
+    "COMPANY_NAME": "Coastal Fastener Supply Co",
+    "CTRY_CD": "US",
+    "TAX_REG_NO": "US-TAX-410",
+    "CONTACT_EMAIL": "sales@coastalfastener.example",
+    "RISK_CD": "L",
+    "REC_STATUS": "I"
+  },
+  {
+    "SUPPLIER_ID": "LEG-004",
+    "COMPANY_NAME": "Anhui Precision Casting Ltd",
+    "CTRY_CD": "CN",
+    "TAX_REG_NO": "CN-TAX-9042",
+    "CONTACT_EMAIL": "trade@anhuicasting.example",
+    "RISK_CD": "H",
+    "REC_STATUS": "A"
+  },
+  {
+    "SUPPLIER_ID": "LEG-005",
+    "COMPANY_NAME": "Riverside Industrial Adhesives",
+    "CTRY_CD": "US",
+    "TAX_REG_NO": "US-TAX-231",
+    "CONTACT_EMAIL": "orders@riversideadhesives.example",
+    "RISK_CD": "M",
+    "REC_STATUS": "B"
+  }
+]
