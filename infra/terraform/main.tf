@@ -8,6 +8,7 @@
 module "subaccount" {
   source    = "./modules/subaccount"
   subdomain = var.subaccount_subdomain
+  region    = var.region
 }
 
 module "entitlements" {
