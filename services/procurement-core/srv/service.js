@@ -168,13 +168,29 @@ module.exports = cds.service.impl(async function () {
   // -- syncLegacySuppliers: pull supplier master data from the on-prem ----
   // legacy system through the Destination-shaped connectivity layer --------
 
-  this.on('syncLegacySuppliers', async () => {
+  this.on('syncLegacySuppliers', async (req) => {
     const destination = getDestination('LEGACY_SUPPLIER_ERP');
-    const res = await fetch(`${destination.URL}/legacy/suppliers`, { signal: AbortSignal.timeout(5000) });
+
+    // A real bug found via live end-to-end testing (not caught by unit
+    // tests, which never exercise a genuinely unreachable network call):
+    // fetch() rejecting with ECONNREFUSED here, uncaught, crashed the
+    // ENTIRE cds server process - a downstream integration being down
+    // took procurement-core's whole API surface with it, not just this
+    // one action. Every other outbound call in this project
+    // (srv/lib/events.js's publish) was already written defensively;
+    // this one wasn't, until this was actually run against a stopped
+    // legacy-erp-gateway and observed crashing the server. Wrapping the
+    // network call specifically (not the whole handler) so a real bug in
+    // the mapping/DB logic below still surfaces as a normal error, not a
+    // silently-swallowed one.
+    let res;
+    try {
+      res = await fetch(`${destination.URL}/legacy/suppliers`, { signal: AbortSignal.timeout(5000) });
+    } catch (err) {
+      return req.error(502, `Legacy ERP gateway (${destination.URL}) is unreachable: ${err.message}`);
+    }
     if (!res.ok) {
-      const err = new Error(`Legacy ERP gateway responded ${res.status}`);
-      err.status = 502;
-      throw err;
+      return req.error(502, `Legacy ERP gateway responded ${res.status}`);
     }
     const legacyRecords = await res.json();
 
