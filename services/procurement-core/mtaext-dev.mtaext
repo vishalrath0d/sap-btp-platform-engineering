@@ -1,0 +1,14 @@
+_schema-version: "3.3"
+ID: procurement-core-dev
+extends: procurement-core
+description: "Dev-environment overrides - the ID above must be unique and different from the base MTA's ID (procurement-core), a real bug hit and documented in a reference project's troubleshooting notes: a missing/duplicate ID here fails cf deploy at validation, not at runtime, so it's worth getting right before the first real deploy attempt."
+
+resources:
+  - name: procurement-core-db
+    parameters:
+      service-plan: hdi-shared
+
+modules:
+  - name: procurement-core-srv
+    properties:
+      LOG_LEVEL: debug

@@ -1,0 +1,52 @@
+# Project "Piper" pipeline configuration - the same config format drives
+# both a self-hosted Jenkins (via the piper-lib-os Jenkins shared library,
+# see ../Jenkinsfile) and the managed SAP Continuous Integration and
+# Delivery service (see ci-cd/sap-cicd-service/README.md) - Piper is the
+# engine underneath both, this file is the one thing that doesn't change
+# between them.
+#
+# Parameter names below verified against SAP/jenkins-library's real step
+# metadata (resources/metadata/mtaBuild.yaml, cloudFoundryDeploy.yaml,
+# tmsUpload.yaml) while building this project - not guessed.
+
+general:
+  buildTool: "mta"
+
+stages:
+  Build:
+    npmExecuteLint: true
+  Additional Unit Tests:
+    npmExecuteScripts: true
+  Release:
+    cloudFoundryDeploy: true
+
+steps:
+  npmExecuteLint:
+    failOnError: false # not enforced yet - no lint config committed; flip
+                         # to true once one exists, rather than pretending
+                         # this gate does something it currently doesn't.
+
+  npmExecuteScripts:
+    runScripts: ["test"]
+
+  mtaBuild:
+    platform: "CF"
+    mtaBuildTool: "cloudMbt"
+
+  cloudFoundryDeploy:
+    cfCredentialsId: "procureiq-cf-credentials" # Jenkins credential ID, not a literal password
+    apiEndpoint: "https://api.cf.us10.hana.ondemand.com" # us10 = US East (VA), matches infra/terraform's region
+    org: "procureiq-dev" # matches infra/terraform/environments.tf's CF org naming
+    space: "dev"
+    deployType: "standard"
+    mtaDeployParameters: "-f --version-rule ALL"
+    mtaExtensionDescriptor: "mtaext-dev.mtaext"
+
+  # Left commented, not deleted: this is the real TMS-based promotion path
+  # (transport/cloud-transport-management, not yet built - needs the real
+  # BTP account's TMS service key, see that folder once it exists), an
+  # alternative to cloudFoundryDeploy pushing straight to one space.
+  # tmsUpload:
+  #   credentialsId: "procureiq-tms-service-key"
+  #   nodeName: "DEV"
+  #   customDescription: "Automated Piper upload"
