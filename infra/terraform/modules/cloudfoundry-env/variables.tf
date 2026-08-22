@@ -9,7 +9,7 @@ variable "org_name" {
 
 variable "landscape_label" {
   type        = string
-  description = "CF landscape label, e.g. 'cf-us10' for US East (VA) - AWS. NOTE the 'cf-' prefix: this is the region ID prefixed, not the bare region ID used elsewhere (e.g. modules/kyma-environment uses a bare region/provider name) - a real, confirmed-by-research distinction, not a typo."
+  description = "CF landscape label, e.g. 'cf-us10' for US East (VA) - AWS. NOTE the 'cf-' prefix: this is the region ID prefixed, not the bare region ID used elsewhere (e.g. modules/kyma-env uses a bare region/provider name) - a real, confirmed-by-research distinction, not a typo."
 }
 
 variable "entitlement_dependency" {
