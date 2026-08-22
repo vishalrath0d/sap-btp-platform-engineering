@@ -50,6 +50,24 @@ back to the requisition and approval that produced it. Nothing creates a
 service definition (`Suppliers`, `PurchaseOrders`, `PurchaseOrderItems` are all
 `@readonly` projections).
 
+### Design note: this routing could instead be SAP Workflow Management (BPMN)
+
+`approval-rules.js`'s flat threshold table is deliberately simple code —
+readable, testable, and exactly matched to this project's actual
+requirement (one linear escalation by amount). **SAP Workflow Management**
+(BPMN-based, distinct from classic ABAP Business Workflow — see
+`docs/concepts/00-scope-boundaries.md` for why the classic one is out of
+scope) is the SAP-native alternative for approval routing, and would be
+the better real choice the moment routing logic needs any of what a flat
+table can't express well: branching approval paths, parallel approvers,
+delegation/out-of-office reassignment, or a business user needing to see
+and adjust the routing rules without a code change. `procurement-core`'s
+routing doesn't need that yet — this is a documented design alternative,
+not a claim that BPMN-based workflow is running here. If/when the
+approval logic outgrows a threshold table, this is the concrete SAP-native
+direction to reach for instead of growing `approval-rules.js` into an
+ad hoc rules engine.
+
 ## Run it locally
 
 ```bash

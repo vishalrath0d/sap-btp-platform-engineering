@@ -101,6 +101,7 @@ Mirrors `ai-ml-llm-ops`'s "known limitations" discipline — stating on purpose 
 | `ai-copilot` | RAG over supplier/contract docs via HANA Vector Engine + LLM, traced via Langfuse (trial/free-tier dual mode, see above) |
 | `integration-flow` | Integration Suite iFlow simulating legacy/non-SAP supplier feed ingestion — genuinely cloud-only tooling, stays blocked on the account |
 | `legacy-erp-gateway` | A small mock "on-prem" legacy supplier system + a Destination-service-shaped connectivity abstraction in `procurement-core` — simulates the Cloud Connector boundary locally (documented as simulated, not tunneled — there's no real on-prem network segment to tunnel to on a laptop), closing the connectivity gap the research flagged as the project's starkest miss |
+| `api-gateway` | API Management simulation in front of `procurement-core` — API-key consumer auth, per-key rate limiting, an API Business Hub-style catalog. Verified full 3-hop end-to-end (client → gateway → procurement-core → legacy-erp-gateway); live testing surfaced and fixed two real bugs, one of them a genuine server-crashing bug in `procurement-core` itself (see that service's README) |
 | ~~`web-ui`~~ | **Decision (Phase 1)**: built as `procurement-core/srv/service-ui.cds` instead of a separate service — CAP's own convention once a project has real Fiori annotations, and it's what actually generates the List Report + Object Page UI at `/$fiori-preview` with zero hand-written frontend code. A standalone deployable Fiori Elements app (its own `webapp/` + `manifest.json` for html5-repo deployment) is a documented follow-up once deploying to BTP for real — that needs the Fiori Elements Yeoman generator or SAP's Fiori tools, neither of which run headlessly. |
 
 ### Platform layer
@@ -115,14 +116,14 @@ Mirrors `ai-ml-llm-ops`'s "known limitations" discipline — stating on purpose 
 - `fiori-launchpad-administration.md` — a short note distinguishing "building the Fiori Elements app" (done, `procurement-core`) from "exposing it via Launchpad catalogs/spaces/role collections" (an admin concern, documented not built)
 
 ### Additional BTP services woven into existing services (not new top-level folders)
-| Addition | Where it lives |
-|---|---|
-| SAP Alert Notification Service + Job Scheduling Service | `spend-anomaly-detector` — a scheduled re-scan job emitting ANS-shaped events on HIGH-severity findings |
-| SAP API Management / API Business Hub-style catalog | In front of `procurement-core`'s OData service |
-| SAP Feature Flags service (simulated) | Toggles `spend-anomaly-detector`'s rule set or `ai-copilot`'s retrieval mode, with a documented before/after |
-| SAP Workflow Management (BPMN) | A documented alternative approval-routing design for `procurement-core`, contrasted with the current in-code threshold routing |
-| SAP Document Management Service (simulated) | Replaces `ai-copilot`'s flat local corpus files as the source-of-truth document store |
-| Multitenancy / MTX | `procurement-core` gets a documented (and where feasible, built) tenant-onboarding/extension flow via `@sap/cds-mtxs` |
+| Addition | Where it lives | Status |
+|---|---|---|
+| SAP Alert Notification Service + Job Scheduling Service | `spend-anomaly-detector` — `POST /jobs/nightly-digest`, ANS-shaped alerts on HIGH-severity findings | **Built**, 19/19 tests |
+| SAP API Management / API Business Hub-style catalog | `api-gateway`, in front of `procurement-core`'s OData service | **Built**, 16/16 tests, verified live end-to-end |
+| SAP Feature Flags service (simulated) | Toggles `spend-anomaly-detector`'s `ROUND_NUMBER_AMOUNT_RULE` at runtime | **Built**, same-process before/after proof |
+| SAP Workflow Management (BPMN) | Documented alternative approval-routing design for `procurement-core`, contrasted with the current in-code threshold routing | **Documented** (design note in that service's README) — not built, current threshold table meets the actual requirement |
+| SAP Document Management Service (simulated) | `ai-copilot`'s `document-store.js` seam, replacing direct `fs` calls | **Built** |
+| Multitenancy / MTX | `docs/concepts/12-multitenancy-and-saas.md` | **Documented, not built** — real tenant subscription needs a SaaS Provisioning service instance with no local equivalent; see that doc for exactly why half-building this would misrepresent verification not actually done |
 
 ## Phased roadmap (against a ~31-day window, adjust as reality intrudes)
 
