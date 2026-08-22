@@ -1,9 +1,8 @@
 'use strict';
 
-const fs = require('fs');
-const path = require('path');
 const config = require('./config');
 const { embed } = require('./ollama-client');
+const documentStore = require('./document-store');
 
 /**
  * Brute-force, in-memory cosine-similarity search over markdown chunks.
@@ -47,11 +46,11 @@ class VectorStore {
     this.chunks = []; // [{ id, source, text, embedding }]
   }
 
-  /** Reads every .md file in corpusDir, chunks it, embeds each chunk via Ollama. */
+  /** Reads every document via document-store.js, chunks it, embeds each chunk via Ollama. */
   async ingest(corpusDir = config.corpusDir) {
-    const files = fs.readdirSync(corpusDir).filter((f) => f.endsWith('.md'));
+    const files = documentStore.listDocuments(corpusDir);
     const chunks = files.flatMap((file) => {
-      const text = fs.readFileSync(path.join(corpusDir, file), 'utf8');
+      const text = documentStore.readDocument(file, corpusDir);
       return chunkMarkdown(file, text);
     });
 
