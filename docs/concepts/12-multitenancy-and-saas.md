@@ -5,6 +5,28 @@ and what would need to be true before building it for real is worth
 doing rather than half-simulating something that needs real
 infrastructure to mean anything.
 
+## Does it actually work in a real (prod) BTP landscape? Yes — unambiguously
+
+Worth stating plainly, since "documented, not built" could be misread as
+doubt about the technology itself: **`@sap/cds-mtxs` is SAP's own
+standard, fully-supported, widely-used-in-production architecture** for
+exactly this — it's how real SAP partners and ISVs run one SaaS
+application across many customer subaccounts today, not an experimental
+or shaky feature. Nothing about it is unproven or prod-risky.
+
+The reason this project hasn't built it isn't "will it work" — it's
+**"can this project verify it works, from where this project currently
+stands"**. That answer is genuinely no *right now*: proving multitenancy
+actually works means having a second real subaccount subscribe to the
+app and confirming tenant isolation for real (see step 4 below) — there
+is no trial-account or local equivalent of "a second subaccount
+subscribes," the same way there's no local equivalent of a second BTP
+region. Once this project has a real landscape with more than one
+subaccount to test against, building and verifying MTX for real is
+straightforward, expected work — not a research problem, not something
+requiring new technology to be invented. The gap is infrastructure
+availability, not capability.
+
 ## What CAP multitenancy actually is
 
 `@sap/cds-mtxs` — the CAP toolkit for turning a single-tenant app like
