@@ -23,12 +23,12 @@ module "entitlements" {
 }
 
 module "cloudfoundry_env" {
-  source          = "./modules/cloudfoundry-env"
-  subaccount_id   = module.subaccount.id
-  org_name        = "procureiq-${var.environment}"
-  landscape_label = "cf-${var.region}"
-
-  depends_on = [module.entitlements]
+  # Lookup, not creation - the trial's default CF org can't be deleted
+  # (confirmed: `cf delete-org` returned "not authorized"), so this adopts
+  # the existing one. See modules/cloudfoundry-env/main.tf's commented-out
+  # resource block for the creation path, kept for when it's actually needed.
+  source        = "./modules/cloudfoundry-env"
+  subaccount_id = module.subaccount.id
 }
 
 module "kyma_env" {
