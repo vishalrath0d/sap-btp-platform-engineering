@@ -1,0 +1,4 @@
+ID,requisitionNumber,description,requestedBy,department,status,currency,totalAmount,supplier_ID,purchaseOrder_ID
+20000000-0000-0000-0000-000000000001,PR-00001,Replacement PLC modules for Line 3,sara.klein@procureiq.example,Plant Operations,CONVERTED,USD,8400.00,10000000-0000-0000-0000-000000000001,30000000-0000-0000-0000-000000000001
+20000000-0000-0000-0000-000000000002,PR-00002,Q3 packaging materials restock,amit.rao@procureiq.example,Warehouse,SUBMITTED,USD,15200.00,10000000-0000-0000-0000-000000000003,
+20000000-0000-0000-0000-000000000003,PR-00003,Structural steel beams - expansion project,amit.rao@procureiq.example,Facilities,DRAFT,EUR,0.00,10000000-0000-0000-0000-000000000002,

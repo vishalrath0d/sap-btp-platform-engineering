@@ -1,0 +1,7 @@
+ID,name,country,taxId,email,riskRating,status
+10000000-0000-0000-0000-000000000001,Acme Components Ltd,US,US-TAX-001,ap@acme-components.example,LOW,ACTIVE
+10000000-0000-0000-0000-000000000002,Nordic Steel Works,SE,SE-TAX-014,billing@nordicsteel.example,LOW,ACTIVE
+10000000-0000-0000-0000-000000000003,Global Circuit Supply,IN,IN-TAX-2291,accounts@globalcircuit.example,MEDIUM,ACTIVE
+10000000-0000-0000-0000-000000000004,Rapid Freight Logistics,DE,DE-TAX-778,finance@rapidfreight.example,MEDIUM,ACTIVE
+10000000-0000-0000-0000-000000000005,Vertex Industrial Materials,CN,CN-TAX-5541,sales@vertexmaterials.example,HIGH,ACTIVE
+10000000-0000-0000-0000-000000000006,Blue Ridge Packaging,US,US-TAX-092,orders@blueridgepack.example,LOW,INACTIVE

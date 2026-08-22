@@ -1,0 +1,58 @@
+{
+  "name": "procurement-core",
+  "version": "0.1.0",
+  "description": "CAP (Node.js) procurement service for ProcureIQ — Purchase Requisition to Purchase Order lifecycle, built for SAP BTP (Cloud Foundry / Kyma).",
+  "private": true,
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "cds-serve",
+    "watch": "cds watch",
+    "test": "jest --runInBand",
+    "build": "cds build --production"
+  },
+  "dependencies": {
+    "@sap/cds": "^9",
+    "@cap-js/sqlite": "^2",
+    "express": "^4"
+  },
+  "devDependencies": {
+    "jest": "^29",
+    "@cap-js/cds-test": "0.4.1",
+    "chai": "^6",
+    "chai-as-promised": "^8"
+  },
+  "cds": {
+    "requires": {
+      "db": {
+        "kind": "sqlite",
+        "credentials": {
+          "url": "db.sqlite"
+        }
+      },
+      "auth": {
+        "kind": "mocked",
+        "users": {
+          "alice": {
+            "roles": ["Requester"]
+          },
+          "bob": {
+            "roles": ["Approver"]
+          },
+          "carol": {
+            "roles": ["Requester", "Approver"]
+          }
+        }
+      },
+      "[test]": {
+        "db": {
+          "kind": "sqlite",
+          "credentials": {
+            "url": ":memory:"
+          }
+        }
+      }
+    }
+  }
+}
