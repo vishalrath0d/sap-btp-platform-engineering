@@ -1,0 +1,16 @@
+node_modules/
+.env
+.env.local
+*.log
+.DS_Store
+gen/
+db.sqlite
+*.mtar
+.cds-services.json
+default-env.json
+.terraform/
+*.tfstate
+*.tfstate.backup
+.terraform.lock.hcl
+*.tfvars
+!*.tfvars.example
