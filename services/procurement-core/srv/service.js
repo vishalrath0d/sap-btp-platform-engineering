@@ -3,9 +3,11 @@
 const cds = require('@sap/cds');
 const { approverRoleFor } = require('./lib/approval-rules');
 const { nextNumber } = require('./lib/sequence');
+const { publishPurchaseOrderCreated } = require('./lib/events');
 
 module.exports = cds.service.impl(async function () {
   const {
+    Suppliers,
     PurchaseRequisitions,
     PurchaseRequisitionItems,
     Approvals,
@@ -110,6 +112,19 @@ module.exports = cds.service.impl(async function () {
     );
 
     await UPDATE(PurchaseRequisitions, id).with({ status: 'CONVERTED', purchaseOrder_ID: poId });
+
+    // Publish for spend-anomaly-detector — see srv/lib/events.js for why
+    // this never blocks or fails the approve() transaction above it.
+    const supplier = await SELECT.one.from(Suppliers, pr.supplier_ID).columns('ID', 'name', 'riskRating');
+    await publishPurchaseOrderCreated({
+      poId,
+      poNumber,
+      supplier,
+      totalAmount: pr.totalAmount,
+      currency: pr.currency,
+      sourceRequisitionId: id,
+      items: items.map((i) => ({ material: i.material, quantity: i.quantity, unitPrice: i.unitPrice })),
+    });
 
     return SELECT.one.from(PurchaseRequisitions, id);
   });
