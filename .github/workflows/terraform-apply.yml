@@ -29,6 +29,21 @@ on:
         description: 'Type "apply" to confirm you intend to run this against the real BTP account'
         required: true
 
+env:
+  TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
+  # TF_VAR_btp_username/password: see terraform-plan.yml's comment - this
+  # workspace's Local execution mode means HCP Terraform's Variables UI
+  # doesn't exist/apply, so credentials have to reach the CLI as env vars
+  # from here instead.
+  TF_VAR_btp_username: ${{ secrets.BTP_USERNAME }}
+  TF_VAR_btp_password: ${{ secrets.BTP_PASSWORD }}
+  # Empty/unset until the two-phase XSUAA apply's step 2 (see
+  # infra/terraform/README.md) - Terraform's own default (null) for
+  # xsuaa_xsappname makes role_collections no-op safely until then, so
+  # this being unset is the correct starting state, not a placeholder to
+  # fill in before the first apply.
+  TF_VAR_xsuaa_xsappname: ${{ secrets.XSUAA_XSAPPNAME }}
+
 defaults:
   run:
     working-directory: infra/terraform
@@ -42,6 +57,8 @@ jobs:
     environment: ${{ github.event.inputs.environment }} # configure required reviewers on
                                                             # each GitHub Environment (dev/qa/prod)
                                                             # before this job can ever run for real
+    env:
+      TF_WORKSPACE: procureiq-${{ github.event.inputs.environment }}
     steps:
       - name: Verify confirmation input
         if: github.event.inputs.confirm != 'apply'
@@ -56,10 +73,7 @@ jobs:
           cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
 
       - name: terraform init
-        run: |
-          terraform init \
-            -backend-config="organization=${{ secrets.TF_CLOUD_ORGANIZATION }}" \
-            -backend-config="workspaces.name=procureiq-${{ github.event.inputs.environment }}"
+        run: terraform init
 
       - name: terraform apply
         run: terraform apply -auto-approve -input=false -var-file="environments/${{ github.event.inputs.environment }}/terraform.tfvars"

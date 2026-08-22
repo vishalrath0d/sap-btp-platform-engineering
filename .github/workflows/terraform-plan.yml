@@ -13,11 +13,21 @@ on:
 
 env:
   # One shared root module (infra/terraform/) for every environment - this
-  # workflow only ever varies TF_ENVIRONMENT and which -var-file/
-  # -backend-config it passes, never the working directory or the .tf
-  # files themselves. See infra/terraform/README.md for why.
+  # workflow only ever varies TF_ENVIRONMENT/TF_WORKSPACE and which
+  # -var-file it passes, never the working directory or the .tf files
+  # themselves. See infra/terraform/README.md.
   TF_ENVIRONMENT: dev
-  TF_WORKSPACE_NAME: procureiq-dev
+  TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
+  TF_WORKSPACE: procureiq-dev
+  # The workspace's Execution Mode is "Local" (GitHub Actions runs plan/
+  # apply, HCP Terraform only stores state) - which means HCP Terraform's
+  # own Variables UI is unavailable for this workspace (confirmed: the
+  # Variables tab genuinely doesn't exist for Local-execution-mode
+  # workspaces) and never gets evaluated even if it did. Variables have to
+  # reach the Terraform CLI directly, as TF_VAR_* env vars, from wherever
+  # the CLI actually runs - here, that's these two secrets.
+  TF_VAR_btp_username: ${{ secrets.BTP_USERNAME }}
+  TF_VAR_btp_password: ${{ secrets.BTP_PASSWORD }}
 
 defaults:
   run:
@@ -41,10 +51,7 @@ jobs:
         run: terraform fmt -check -recursive .
 
       - name: terraform init
-        run: |
-          terraform init \
-            -backend-config="organization=${{ secrets.TF_CLOUD_ORGANIZATION }}" \
-            -backend-config="workspaces.name=${{ env.TF_WORKSPACE_NAME }}"
+        run: terraform init
 
       - name: terraform plan
         id: plan
