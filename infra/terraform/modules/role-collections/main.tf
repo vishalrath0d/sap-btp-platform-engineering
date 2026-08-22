@@ -5,8 +5,15 @@
 # changes a role collection by hand in the cockpit later. Both approaches
 # are documented (not just one silently assumed) - see
 # services/procurement-core/xs-security.json and environments/dev/README.md.
+# Checking != null alone isn't enough: an unset GitHub Actions secret
+# (secrets.XSUAA_XSAPPNAME before it's created) resolves to an empty
+# string "", not null, when wired into TF_VAR_xsuaa_xsappname - "" != null
+# is true, so a plain null check would have tried creating role
+# collections with role_template_app_id = "", not safely no-op'd. Caught
+# before it happened, not after - treating "not set" and "empty string"
+# the same is what the two-phase apply this module supports actually needs.
 resource "btp_subaccount_role_collection" "this" {
-  for_each = var.xsuaa_xsappname != null ? { for rc in var.role_collections : rc.name => rc } : {}
+  for_each = (var.xsuaa_xsappname != null && var.xsuaa_xsappname != "") ? { for rc in var.role_collections : rc.name => rc } : {}
 
   subaccount_id = var.subaccount_id
   name          = each.value.name
