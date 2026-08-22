@@ -1,35 +1,41 @@
-# Data-source lookup (active) - confirmed via `cf delete-org` actually
-# failing ("You are not authorized to perform the requested action"):
-# trial's default CF org genuinely cannot be deleted, so Terraform must
-# adopt the existing one rather than create a new one.
+# Adaptive: look up what's already provisioned, only create what's
+# missing - works correctly on BOTH a trial (Cloud Foundry comes
+# pre-provisioned and can't be deleted or recreated - confirmed live:
+# `cf delete-org` returned "not authorized") AND a fresh/real subaccount
+# (no CF yet, so this creates it automatically instead of silently
+# no-op'ing or erroring).
 data "btp_subaccount_environment_instances" "all" {
   subaccount_id = var.subaccount_id
 }
 
 locals {
-  cloudfoundry_instances = [
+  existing_cloudfoundry = [
     for env in data.btp_subaccount_environment_instances.all.values : env
     if env.environment_type == "cloudfoundry"
   ]
+  cloudfoundry_exists = length(local.existing_cloudfoundry) > 0
 }
 
-# --- Kept commented, not deleted, per explicit instruction ---
-# The creation path below is real and correct for a landscape where CF
-# genuinely doesn't exist yet (a fresh non-trial subaccount, or - maybe -
-# qa/prod once those exist for real). Uncomment and swap main.tf's module
-# call back to these variables if that's ever the case; until then the
-# data source above is what's actually used.
-#
-# resource "btp_subaccount_environment_instance" "this" {
-#   subaccount_id    = var.subaccount_id
-#   name             = var.org_name
-#   environment_type = "cloudfoundry"
-#   service_name     = "cloudfoundry"
-#   plan_name        = "standard"
-#   landscape_label  = var.landscape_label
-#
-#   parameters = jsonencode({
-#     instance_name = var.org_name
-#     org_name      = var.org_name
-#   })
-# }
+resource "btp_subaccount_environment_instance" "this" {
+  count = local.cloudfoundry_exists ? 0 : 1
+
+  subaccount_id    = var.subaccount_id
+  name             = var.org_name
+  environment_type = "cloudfoundry"
+  service_name     = "cloudfoundry"
+  plan_name        = "standard"
+  landscape_label  = var.landscape_label
+
+  parameters = jsonencode({
+    instance_name = var.org_name
+    org_name      = var.org_name
+  })
+}
+
+locals {
+  # Whichever branch actually has the data - the pre-existing lookup, or
+  # the one this module just created.
+  cloudfoundry_id            = local.cloudfoundry_exists ? local.existing_cloudfoundry[0].id : try(btp_subaccount_environment_instance.this[0].id, null)
+  cloudfoundry_dashboard_url = local.cloudfoundry_exists ? local.existing_cloudfoundry[0].dashboard_url : try(btp_subaccount_environment_instance.this[0].dashboard_url, null)
+  cloudfoundry_org_name      = local.cloudfoundry_exists ? local.existing_cloudfoundry[0].name : try(btp_subaccount_environment_instance.this[0].name, null)
+}
