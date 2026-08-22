@@ -1,0 +1,21 @@
+{
+  "name": "spend-anomaly-detector",
+  "version": "0.1.0",
+  "description": "Event-driven spend-anomaly review for newly-created Purchase Orders. Designed to run on Kyma, subscribing to a PurchaseOrderCreated event via SAP Event Mesh in production; runs as a plain HTTP webhook receiver locally (see README).",
+  "private": true,
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "test": "jest --runInBand"
+  },
+  "dependencies": {
+    "express": "^4"
+  },
+  "devDependencies": {
+    "jest": "^29",
+    "supertest": "^7"
+  }
+}
