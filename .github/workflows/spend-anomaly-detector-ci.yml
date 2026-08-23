@@ -1,0 +1,121 @@
+name: spend-anomaly-detector CI
+
+# The one service in this repo that deploys to Kyma, not Cloud Foundry -
+# see src/server.js's own comment on why (event-driven, container-native,
+# the natural fit for a K8s runtime rather than an MTA/buildpack app). CF
+# services in this repo (procurement-core, ai-copilot, api-gateway,
+# legacy-erp-gateway) build with buildpacks and `cf push`/`cf deploy`;
+# this one builds a real container image, pushes it to GitHub Container
+# Registry, and applies Kubernetes + BTP Operator + APIRule manifests with
+# kubectl against the Kyma cluster's kubeconfig - a genuinely different
+# deploy shape, not the same pipeline with different target names.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/spend-anomaly-detector/**"
+      - ".github/workflows/spend-anomaly-detector-ci.yml"
+  pull_request:
+    paths:
+      - "services/spend-anomaly-detector/**"
+
+defaults:
+  run:
+    working-directory: services/spend-anomaly-detector
+
+permissions:
+  contents: read
+  packages: write # needed to push to ghcr.io
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: services/spend-anomaly-detector/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  build-image:
+    needs: test
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.meta.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set image tag
+        id: meta
+        run: echo "image=ghcr.io/${{ github.repository }}/spend-anomaly-detector:${{ github.sha }}" >> "$GITHUB_OUTPUT"
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: services/spend-anomaly-detector
+          push: true
+          tags: ${{ steps.meta.outputs.image }}
+
+  # Deploy is intentionally NOT wired to run automatically yet - same
+  # build-first, deploy-after-review posture as every other service's CI
+  # in this repo.
+  deploy-dev:
+    needs: build-image
+    runs-on: ubuntu-latest
+    environment: dev
+    if: false # remove once ready to deploy for real
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        env:
+          KYMA_KUBECONFIG: ${{ secrets.KYMA_KUBECONFIG }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "$KYMA_KUBECONFIG" | base64 -d > "$HOME/.kube/config"
+
+      - name: Ensure namespace exists
+        run: kubectl get namespace procureiq || kubectl create namespace procureiq
+
+      - name: Apply BTP Operator ServiceInstance + ServiceBinding
+        run: |
+          kubectl apply -f k8s/service-instance.yaml
+          kubectl apply -f k8s/service-binding.yaml
+          kubectl wait --for=condition=Ready servicebinding/spend-anomaly-detector-xsuaa-binding \
+            -n procureiq --timeout=120s
+
+      - name: Deploy the workload
+        run: |
+          sed "s#spend-anomaly-detector:latest#spend-anomaly-detector:${{ github.sha }}#" \
+            k8s/deployment.yaml | kubectl apply -f -
+
+      - name: Wire the real XSUAA issuer into APIRule and apply it
+        run: |
+          # The XSUAA binding secret's `url` field is this landscape's real
+          # issuer base - not knowable until the ServiceBinding above is
+          # actually Ready, same "known after apply" reality
+          # infra/terraform's adaptive modules already document for CF/Kyma.
+          XSUAA_ISSUER=$(kubectl get secret spend-anomaly-detector-xsuaa-binding \
+            -n procureiq -o jsonpath='{.data.url}' | base64 -d)
+          XSUAA_JWKS_URI="${XSUAA_ISSUER}/token_keys"
+          export XSUAA_ISSUER XSUAA_JWKS_URI
+          envsubst < k8s/apirule.yaml | kubectl apply -f -

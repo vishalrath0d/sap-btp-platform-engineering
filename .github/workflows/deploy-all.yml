@@ -1,0 +1,227 @@
+name: deploy all (orchestrated)
+
+# Deploys the whole landscape in the correct dependency order from one
+# manual trigger, instead of five/six independent `if: false` jobs each
+# needing its own manual flip. Real dependency chain, not an arbitrary
+# ordering:
+#
+#   terraform apply                        (subaccount, entitlements, CF
+#                                            org/space, Kyma env, XSUAA,
+#                                            role collections)
+#         |
+#         +--> procurement-core  (MTA: needs the CF space + XSUAA + HANA
+#         |                       terraform just ensured exist)
+#         |       |
+#         |       +--> api-gateway          (needs procurement-core's live
+#         |                                   route to set PROCUREMENT_CORE_URL)
+#         |
+#         +--> ai-copilot                   (needs only the CF space)
+#         +--> legacy-erp-gateway           (needs only the CF space)
+#         +--> spend-anomaly-detector       (Kyma: needs the Kyma env +
+#                                             BTP Operator terraform/the
+#                                             cluster already has)
+#
+# Known trade-off, stated rather than hidden: each job below duplicates
+# (deliberately kept minimal and in sync) the deploy steps already written
+# in that service's own <service>-ci.yml, rather than calling those
+# workflows as reusable workflows. That's a real, common shortcut at this
+# project's size - the alternative (threading a workflow_call input
+# through every service workflow to override its own if:false gate) adds
+# real indirection for a landscape this small. A change to one deploy step
+# should be mirrored in the other file; nothing here is the only place
+# that logic exists.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Which environment to deploy"
+        required: true
+        type: choice
+        options:
+          - dev
+          - qa
+          - prod
+      confirm:
+        description: 'Type "deploy" to confirm you intend to run this against the real BTP account'
+        required: true
+
+env:
+  TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
+  TF_VAR_btp_username: ${{ secrets.BTP_USERNAME }}
+  TF_VAR_btp_password: ${{ secrets.BTP_PASSWORD }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  verify-confirmation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify confirmation input
+        if: github.event.inputs.confirm != 'deploy'
+        run: |
+          echo "::error::Confirmation input must be exactly 'deploy' - got '${{ github.event.inputs.confirm }}'"
+          exit 1
+
+  terraform-apply:
+    needs: verify-confirmation
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    env:
+      TF_WORKSPACE: procureiq-${{ github.event.inputs.environment }}
+    defaults:
+      run:
+        working-directory: infra/terraform
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+      - run: terraform init
+      - run: terraform apply -auto-approve -input=false -var-file="environments/${{ github.event.inputs.environment }}/terraform.tfvars"
+
+  procurement-core:
+    needs: terraform-apply
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    defaults:
+      run:
+        working-directory: services/procurement-core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build the MTA
+        run: |
+          npm install -g mbt
+          npm ci
+          npx cds build --production
+          mbt build --platform cf
+      - name: Install cf CLI + multiapps plugin
+        run: |
+          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
+          sudo mv cf8 /usr/local/bin/cf
+          cf install-plugin -f multiapps
+      - name: cf login and deploy
+        env:
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+        run: |
+          cf api https://api.cf.us10.hana.ondemand.com
+          cf auth "$CF_USERNAME" "$CF_PASSWORD"
+          cf target -o procureiq-${{ github.event.inputs.environment }} -s ${{ github.event.inputs.environment }}
+          cf deploy mta_archives/*.mtar -e mtaext-${{ github.event.inputs.environment }}.mtaext --no-confirm
+
+  ai-copilot:
+    needs: terraform-apply
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    defaults:
+      run:
+        working-directory: services/ai-copilot
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cf CLI
+        run: |
+          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
+          sudo mv cf8 /usr/local/bin/cf
+      - name: cf login and push
+        env:
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+        run: |
+          cf api https://api.cf.us10.hana.ondemand.com
+          cf auth "$CF_USERNAME" "$CF_PASSWORD"
+          cf target -o procureiq-${{ github.event.inputs.environment }} -s ${{ github.event.inputs.environment }}
+          cf push -f manifest.yml
+
+  legacy-erp-gateway:
+    needs: terraform-apply
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    defaults:
+      run:
+        working-directory: services/legacy-erp-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cf CLI
+        run: |
+          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
+          sudo mv cf8 /usr/local/bin/cf
+      - name: cf login and push
+        env:
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+        run: |
+          cf api https://api.cf.us10.hana.ondemand.com
+          cf auth "$CF_USERNAME" "$CF_PASSWORD"
+          cf target -o procureiq-${{ github.event.inputs.environment }} -s ${{ github.event.inputs.environment }}
+          cf push -f manifest.yml
+
+  api-gateway:
+    needs: procurement-core
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    defaults:
+      run:
+        working-directory: services/api-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cf CLI
+        run: |
+          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
+          sudo mv cf8 /usr/local/bin/cf
+      - name: cf login, push, and wire the live procurement-core URL
+        env:
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+        run: |
+          cf api https://api.cf.us10.hana.ondemand.com
+          cf auth "$CF_USERNAME" "$CF_PASSWORD"
+          cf target -o procureiq-${{ github.event.inputs.environment }} -s ${{ github.event.inputs.environment }}
+          cf push -f manifest.yml
+          CORE_GUID=$(cf app procurement-core-srv --guid)
+          CORE_URL=$(cf curl "/v3/apps/${CORE_GUID}/routes" | jq -r '.resources[0].url')
+          cf set-env api-gateway PROCUREMENT_CORE_URL "https://${CORE_URL}/procurement"
+          cf restage api-gateway
+
+  spend-anomaly-detector:
+    needs: terraform-apply
+    runs-on: ubuntu-latest
+    environment: ${{ github.event.inputs.environment }}
+    defaults:
+      run:
+        working-directory: services/spend-anomaly-detector
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: services/spend-anomaly-detector
+          push: true
+          tags: ghcr.io/${{ github.repository }}/spend-anomaly-detector:${{ github.sha }}
+      - uses: azure/setup-kubectl@v4
+      - name: Configure kubeconfig
+        env:
+          KYMA_KUBECONFIG: ${{ secrets.KYMA_KUBECONFIG }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "$KYMA_KUBECONFIG" | base64 -d > "$HOME/.kube/config"
+      - name: Deploy to Kyma
+        run: |
+          kubectl get namespace procureiq || kubectl create namespace procureiq
+          kubectl apply -f k8s/service-instance.yaml
+          kubectl apply -f k8s/service-binding.yaml
+          kubectl wait --for=condition=Ready servicebinding/spend-anomaly-detector-xsuaa-binding -n procureiq --timeout=120s
+          sed "s#spend-anomaly-detector:latest#spend-anomaly-detector:${{ github.sha }}#" k8s/deployment.yaml | kubectl apply -f -
+          XSUAA_ISSUER=$(kubectl get secret spend-anomaly-detector-xsuaa-binding -n procureiq -o jsonpath='{.data.url}' | base64 -d)
+          XSUAA_JWKS_URI="${XSUAA_ISSUER}/token_keys"
+          export XSUAA_ISSUER XSUAA_JWKS_URI
+          envsubst < k8s/apirule.yaml | kubectl apply -f -

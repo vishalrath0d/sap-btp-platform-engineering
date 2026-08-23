@@ -1,0 +1,72 @@
+name: api-gateway CI
+
+# Same monorepo convention as procurement-core-ci.yml. This service's
+# deploy step sets PROCUREMENT_CORE_URL as a real CF env var post-push,
+# not baked into manifest.yml - see that file's comment for why.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/api-gateway/**"
+      - ".github/workflows/api-gateway-ci.yml"
+  pull_request:
+    paths:
+      - "services/api-gateway/**"
+
+defaults:
+  run:
+    working-directory: services/api-gateway
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: services/api-gateway/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  deploy-dev:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: dev
+    if: false # remove once ready to deploy for real - see procurement-core-ci.yml
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cf CLI
+        run: |
+          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
+          sudo mv cf8 /usr/local/bin/cf
+
+      - name: cf login
+        env:
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+        run: |
+          cf api https://api.cf.us10.hana.ondemand.com
+          cf auth "$CF_USERNAME" "$CF_PASSWORD"
+          cf target -o procureiq-dev -s dev
+
+      - name: cf push
+        run: cf push -f manifest.yml
+
+      - name: Set PROCUREMENT_CORE_URL from the live route
+        run: |
+          CORE_URL=$(cf app procurement-core-srv --guid >/dev/null 2>&1 && cf curl "/v3/apps/$(cf app procurement-core-srv --guid)/routes" | jq -r '.resources[0].url' || echo "")
+          if [ -n "$CORE_URL" ]; then
+            cf set-env api-gateway PROCUREMENT_CORE_URL "https://${CORE_URL}/procurement"
+            cf restage api-gateway
+          else
+            echo "::warning::procurement-core-srv route not found - PROCUREMENT_CORE_URL left unset, deploy that service first"
+          fi

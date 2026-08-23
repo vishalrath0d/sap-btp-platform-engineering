@@ -1,0 +1,96 @@
+# Brings up the whole ProcureIQ service graph locally with one command,
+# the same "docker compose up" pattern as the ai-ml-llm-ops project - see
+# each service's README for what it does on its own. This is a local dev/
+# test harness, not how production deploys (procurement-core deploys to
+# Cloud Foundry via MTA, spend-anomaly-detector to Kyma as a container -
+# see docs/ for that split); it exists so the whole system can be exercised
+# through real HTTP calls without any of that, and without a live BTP
+# account.
+#
+#   docker compose up --build          # core services (no local LLM)
+#   docker compose --profile ai up --build   # + ai-copilot's real backend
+#
+# Service graph (who calls whom, matches the actual code - see
+# procurement-core/srv/lib/events.js and destinations.json, and
+# api-gateway/src/config.js):
+#
+#   api-gateway (4008) --> procurement-core (4004)
+#   procurement-core (4004) --> spend-anomaly-detector (4006)   [PO created event, fire-and-forget]
+#   procurement-core (4004) --> legacy-erp-gateway (4007)       [supplier sync, via simulated Destination]
+#   ai-copilot (4005) --> ollama (11434)                        [optional - profile "ai"]
+#
+# Try it once everything's healthy - see the root README's "Run all five
+# services locally" section for verified, working curl examples covering
+# every real cross-service path (api-gateway's own auth is an X-API-Key,
+# issued via POST /admin/keys - not the Basic auth procurement-core itself
+# uses).
+
+services:
+  procurement-core:
+    build: ./services/procurement-core
+    ports:
+      - "4004:4004"
+    environment:
+      SPEND_ANOMALY_DETECTOR_URL: http://spend-anomaly-detector:4006/events/purchase-order-created
+      LEGACY_SUPPLIER_ERP_URL: http://legacy-erp-gateway:4007
+    depends_on:
+      spend-anomaly-detector:
+        condition: service_healthy
+      legacy-erp-gateway:
+        condition: service_healthy
+
+  spend-anomaly-detector:
+    build: ./services/spend-anomaly-detector
+    ports:
+      - "4006:4006"
+
+  legacy-erp-gateway:
+    build: ./services/legacy-erp-gateway
+    ports:
+      - "4007:4007"
+
+  api-gateway:
+    build: ./services/api-gateway
+    ports:
+      - "4008:4008"
+    environment:
+      PROCUREMENT_CORE_URL: http://procurement-core:4004/procurement
+    depends_on:
+      procurement-core:
+        condition: service_healthy
+
+  ai-copilot:
+    # Genuinely needs Ollama, not optional the way the comment below on
+    # `ollama` might suggest at a glance: verified live that server.js's
+    # main() ingests the corpus via Ollama embeddings synchronously at
+    # boot and exits(1) if that call fails (ENOTFOUND without a running
+    # Ollama) - it does NOT degrade gracefully at startup the way its own
+    # /health handler's `degraded` status implies for *post-boot*
+    # reachability checks. So this service shares the "ai" profile with
+    # its dependency rather than living in the default set.
+    build: ./services/ai-copilot
+    profiles: ["ai"]
+    ports:
+      - "4005:4005"
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+    depends_on:
+      - ollama
+
+  # Real local LLM backend for ai-copilot's RAG endpoints (embeddings +
+  # chat) - optional because it's a genuinely heavy dependency (pulls
+  # multi-GB models on first run), not needed to exercise the rest of the
+  # system. Bring it up with `docker compose --profile ai up`, then once
+  # it's running, pull the two models ai-copilot's config.js expects:
+  #   docker compose exec ollama ollama pull all-minilm
+  #   docker compose exec ollama ollama pull qwen2.5:1.5b
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ai"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+
+volumes:
+  ollama-data:

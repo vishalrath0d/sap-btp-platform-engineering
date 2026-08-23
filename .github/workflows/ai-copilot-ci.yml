@@ -1,0 +1,66 @@
+name: ai-copilot CI
+
+# Same monorepo convention as procurement-core-ci.yml - one workflow per
+# service, path-filtered. This service is a plain `cf push` app (see
+# manifest.yml), so its deploy job skips the MTA build steps
+# procurement-core's needs.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "services/ai-copilot/**"
+      - ".github/workflows/ai-copilot-ci.yml"
+  pull_request:
+    paths:
+      - "services/ai-copilot/**"
+
+defaults:
+  run:
+    working-directory: services/ai-copilot
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: services/ai-copilot/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run tests
+        run: npm test
+
+  # Deploy is intentionally NOT wired to run automatically yet - see
+  # procurement-core-ci.yml's identical comment; this project's account
+  # strategy is build-first, deploy-after-review.
+  deploy-dev:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: dev
+    if: false # remove once ready to deploy for real
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install cf CLI
+        run: |
+          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
+          sudo mv cf8 /usr/local/bin/cf
+
+      - name: cf login
+        env:
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+        run: |
+          cf api https://api.cf.us10.hana.ondemand.com
+          cf auth "$CF_USERNAME" "$CF_PASSWORD"
+          cf target -o procureiq-dev -s dev
+
+      - name: cf push
+        run: cf push -f manifest.yml

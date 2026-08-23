@@ -1,0 +1,12 @@
+node_modules
+.env
+.env.local
+*.log
+db.sqlite*
+gen/
+mta_archives/
+.cds-services.json
+default-env.json
+test/
+.pipeline/
+Jenkinsfile

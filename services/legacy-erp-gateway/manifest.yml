@@ -1,0 +1,19 @@
+# Plain `cf push` manifest - see ai-copilot/manifest.yml's comment for why
+# this isn't an MTA. Deploying this "legacy on-prem system" simulation to
+# CF at all is itself a simplification worth being explicit about: for
+# real, this app would never be a BTP-managed CF app - it stands in for
+# something running on-prem, reachable only through Cloud Connector. It's
+# pushed to CF here purely so procurement-core's Destination-service call
+# (ProxyType: OnPremise) has something real to resolve to during local/dev
+# testing against the actual deployed landscape, not to claim this
+# represents a real on-prem topology.
+---
+applications:
+  - name: legacy-erp-gateway
+    memory: 128M
+    disk_quota: 256M
+    buildpacks:
+      - nodejs_buildpack
+    command: npm start
+    env:
+      NODE_ENV: production
