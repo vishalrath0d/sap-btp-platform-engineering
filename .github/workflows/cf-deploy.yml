@@ -32,28 +32,20 @@ name: cf deploy (all Cloud Foundry services)
 # of them being microservices. This pipeline coordinates WHEN they deploy
 # together; it doesn't erase that they're independently deployable units.
 #
-# `secrets.BTP_USERNAME`/`secrets.BTP_PASSWORD` below are this workflow's
+# `secrets.CF_USERNAME`/`secrets.CF_PASSWORD` below are this workflow's
 # own declared `workflow_call` parameters (see `on.workflow_call.secrets`)
-# - named to match the real repo secrets directly, not translated through
-# a separate CF_USERNAME/CF_PASSWORD name at this boundary (an earlier
-# version did that and it was pure indirection: a Cloud Foundry org on
-# BTP authenticates with the same SAP Universal ID as the cockpit login,
-# there's no separate CF-specific credential to name differently).
-# `deploy.yml`'s passthrough is now a straight 1:1 pass:
-# `BTP_USERNAME: ${{ secrets.BTP_USERNAME }}`. Reusable-workflow
-# `secrets.*` is scoped to exactly what `workflow_call.secrets` declares,
-# not the full repo secret store - real GitHub Actions constraint, hit
-# live as a `startup_failure` when this workflow referenced a secret name
-# it hadn't declared, confirmed statically via `actionlint`. Running this
-# workflow standalone via `workflow_dispatch` (bypassing `deploy.yml`)
-# would need real `BTP_USERNAME`/`BTP_PASSWORD` repo secrets to exist,
-# which they do - both paths work.
-#
-# The local `$CF_USERNAME`/`$CF_PASSWORD` shell variables inside each
-# step below are unrelated to secret naming - just short, readable local
-# names for what they're used for right there (`cf auth "$CF_USERNAME"
-# "$CF_PASSWORD"`), sourced from the `secrets.BTP_USERNAME`/
-# `BTP_PASSWORD` parameters via each step's own `env:` block.
+# - real GitHub Actions constraint, hit live and fixed: a reusable
+# workflow's `secrets.*` context is scoped to exactly what it declares,
+# not the full repo secret store, even if a same-named repo secret
+# exists (confirmed via `actionlint`, a real static type-checker for
+# this). There is no separate CF-specific secret actually stored in this
+# repo - `deploy.yml`'s own passthrough (`CF_USERNAME: ${{ secrets.
+# BTP_USERNAME }}`) is what supplies the real value when this runs via
+# `workflow_call`, since a Cloud Foundry org on BTP authenticates with
+# the same SAP Universal ID as the cockpit login. Running this workflow
+# standalone via `workflow_dispatch` instead (bypassing `deploy.yml`)
+# would need real `CF_USERNAME`/`CF_PASSWORD` repo secrets to exist too -
+# not yet created, since `deploy.yml` is the path actually used so far.
 
 on:
   workflow_dispatch:
@@ -72,9 +64,9 @@ on:
         required: true
         type: string
     secrets:
-      BTP_USERNAME:
+      CF_USERNAME:
         required: true
-      BTP_PASSWORD:
+      CF_PASSWORD:
         required: true
 
 jobs:
@@ -123,8 +115,8 @@ jobs:
           cf install-plugin -f multiapps
       - name: cf login and deploy
         env:
-          CF_USERNAME: ${{ secrets.BTP_USERNAME }}
-          CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
@@ -147,8 +139,8 @@ jobs:
           sudo mv cf8 /usr/local/bin/cf
       - name: cf login and push
         env:
-          CF_USERNAME: ${{ secrets.BTP_USERNAME }}
-          CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
@@ -171,8 +163,8 @@ jobs:
           sudo mv cf8 /usr/local/bin/cf
       - name: cf login and push
         env:
-          CF_USERNAME: ${{ secrets.BTP_USERNAME }}
-          CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
@@ -200,8 +192,8 @@ jobs:
           sudo mv cf8 /usr/local/bin/cf
       - name: cf login and push
         env:
-          CF_USERNAME: ${{ secrets.BTP_USERNAME }}
-          CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
@@ -225,8 +217,8 @@ jobs:
           sudo mv cf8 /usr/local/bin/cf
       - name: cf login, push, and wire the live procurement-core URL
         env:
-          CF_USERNAME: ${{ secrets.BTP_USERNAME }}
-          CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
@@ -256,8 +248,8 @@ jobs:
           sudo mv cf8 /usr/local/bin/cf
       - name: cf login and wire the live routes
         env:
-          CF_USERNAME: ${{ secrets.BTP_USERNAME }}
-          CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
