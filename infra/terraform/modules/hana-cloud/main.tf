@@ -33,10 +33,17 @@
 # subaccount, the same way modules/xsuaa's subaccount-level XSUAA
 # instance backs role collections used from any space.
 resource "btp_subaccount_service_instance" "hana_cloud" {
-  subaccount_id          = var.subaccount_id
-  name                   = "${var.name_prefix}-hana-cloud"
-  service_offering_name  = "hana-cloud"
-  serviceplan_name       = "hana-free"
+  subaccount_id         = var.subaccount_id
+  name                  = "${var.name_prefix}-hana-cloud"
+  service_offering_name = "hana-cloud"
+  serviceplan_name      = "hana-free"
+  # Real bug hit live: leaving `parameters` unset entirely isn't the same
+  # as "no parameters" to this broker - the create call failed with
+  # "Failed to unmarshal parameters: unexpected end of JSON input", i.e.
+  # it tried to JSON-parse an empty string. An explicit empty object is
+  # the real fix, matching modules/xsuaa always passing `parameters`
+  # rather than omitting it.
+  parameters = "{}"
 
   timeouts = {
     # Real HANA Cloud provisioning is slow (tens of minutes, not seconds
