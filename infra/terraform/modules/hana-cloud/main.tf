@@ -45,17 +45,26 @@ resource "btp_subaccount_service_instance" "hana_cloud" {
   #    `cf create-service hana-cloud hana-free ...` with no -c at all
   #    (bypassing Terraform entirely) that this is a genuine broker
   #    requirement, not a provider serialization quirk.
-  # The real minimal shape came from the plan's own published create
+  # 3) data.edition/data.memory alone (the plan's published schema's
+  #    "required" list) still failed at broker-side runtime validation:
+  #    "invalid Parameter (systempassword): Required for HANA creation" -
+  #    the published JSON Schema's `required` array didn't capture this
+  #    one, only runtime did. generateSystemPassword=true is the
+  #    documented way to satisfy it without this project inventing and
+  #    storing a HANA system password itself (procurement-core only ever
+  #    needs its HDI container binding credentials, a separate concern
+  #    from the database's own system password).
+  # The rest of the shape came from the plan's own published create
   # schema (`cf curl /v3/service_plans/<guid>` -> .schemas.
-  # service_instance.create.parameters, queried live, not guessed):
-  # top-level requires "data"; data.required = ["edition", "memory"];
-  # for the hana-free plan specifically, data.memory has minimum=maximum
-  # =16 (fixed 16GB, no scaling on this plan) and data.edition's enum is
+  # service_instance.create.parameters, queried live, not guessed): for
+  # the hana-free plan specifically, data.memory has minimum=maximum=16
+  # (fixed 16GB, no scaling on this plan) and data.edition's enum is
   # ["cloud", "orange"], default "cloud".
   parameters = jsonencode({
     data = {
-      memory  = 16
-      edition = "cloud"
+      memory                 = 16
+      edition                = "cloud"
+      generateSystemPassword = true
     }
   })
 
