@@ -25,7 +25,10 @@ jobs:
           cf api https://api.cf.us10-001.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
           cf target -o 4cbf0c12trial -s dev
-          echo "=== create-service, no parameters at all ==="
-          cf create-service hana-cloud hana-free scratch-hana-check || true
-          echo "=== service status ==="
-          cf service scratch-hana-check || true
+          echo "=== plan guid lookup ==="
+          PLAN_GUID=$(cf curl "/v3/service_plans?names=hana-free" | jq -r '.resources[0].guid')
+          echo "plan guid: $PLAN_GUID"
+          echo "=== plan schema (create-service parameters, if published) ==="
+          cf curl "/v3/service_plans/${PLAN_GUID}?include=service_offering" | jq '.'
+          echo "=== schemas endpoint (OSBv2-style) ==="
+          cf curl "/v3/service_plans/${PLAN_GUID}" | jq '.schemas'
