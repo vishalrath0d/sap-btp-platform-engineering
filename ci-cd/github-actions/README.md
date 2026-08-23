@@ -1,60 +1,88 @@
 # GitHub Actions
 
 Real files, all at the repo root (`.github/workflows/` — GitHub only
-discovers workflows there, see `ci-cd/README.md`), organized the same way
-the Piper track is: test per service, deploy per runtime.
+discovers workflows there, see `ci-cd/README.md`).
 
-## Test — one workflow per service, path-filtered
+## Test — one file, real change-detection, not five files
 
-`procurement-core-ci.yml`, `ai-copilot-ci.yml`, `api-gateway-ci.yml`,
-`legacy-erp-gateway-ci.yml`, `spend-anomaly-detector-ci.yml` — each runs
-`npm ci && npm test` (and, for `procurement-core`/`spend-anomaly-detector`,
-an extra build-verification job: `cds build --production` → `mbt build`
-producing a real `.mtar` artifact; a real container image build+push to
-GHCR) on every PR touching that service's own `services/<name>/**` path.
-This split is real, standard monorepo CI practice — a change to one
-service shouldn't re-run every other service's tests, and each PR gets a
-fast, correctly-scoped status check per service.
+`test.yml` — a `changes` job (`dorny/paths-filter@v3`, a real, widely-used
+action for exactly this) inspects which paths actually changed, then each
+service's own job runs conditionally on that. This replaces five earlier
+per-service files that each differed only in which path/working-directory
+they used — the actual property that mattered (a change to one service
+doesn't re-run every other service's tests, each PR gets a fast,
+correctly-scoped status check per service) is preserved; the file count
+isn't. `procurement-core` and `spend-anomaly-detector`'s jobs also carry
+an extra build-verification step (`cds build` → `mbt build` producing a
+real `.mtar`; a real container image build+push to GHCR) — proving the
+deployable artifact actually builds, independent of whether anyone is
+deploying right now.
 
-## Deploy — one workflow per runtime, not per service
+## Deploy — one file, routes to the right mechanism
 
-- **`cf-deploy.yml`** — deploys all four Cloud Foundry-bound services
-  (`procurement-core` via `cf deploy` against its `.mtar`, the other three
-  via `cf push`), in dependency order (`api-gateway` last, since it needs
+**`deploy.yml`** — a single `workflow_dispatch` with a `target` choice
+input (`all` / `cf` / `kyma` / `piper-cf`) that routes to the right
+reusable workflow instead of always running everything:
+
+- **`cf-deploy.yml`** — all four Cloud Foundry-bound services (plain `cf`
+  CLI), in dependency order (`api-gateway` last, since it needs
   `procurement-core`'s live route).
-- **`kyma-deploy.yml`** — builds and pushes `spend-anomaly-detector`'s
-  container image, then applies its BTP Operator + `APIRule` manifests.
-- **`deploy-all.yml`** — one `workflow_dispatch` running `terraform apply`
-  then both of the above, in order, for a genuinely one-shot "deploy the
-  whole landscape" trigger.
+- **`kyma-deploy.yml`** — `spend-anomaly-detector`'s image build+push,
+  then its BTP Operator + `APIRule` manifests (plain `kubectl`).
+- **`piper-cf-deploy.yml`** — the same CF deploy as `cf-deploy.yml`, but
+  through the real **Piper CLI binary** instead of plain `cf`/`mbt`
+  commands — see "Is Piper still real, and is it Jenkins-only?" below.
+  An alternate *mechanism* for the same CF target, not a fifth thing that
+  runs alongside the others — choosing `piper-cf` runs instead of `cf`,
+  not in addition to it.
 
-All three are real and complete but gated behind a typed `confirm` input
-and a per-environment GitHub Environment (which can require reviewers) —
-turning on real deployment is a repo-settings change (add reviewers,
-trigger the workflow), not a rewrite. `cf-deploy.yml`/`kyma-deploy.yml`
-are also real reusable workflows (`workflow_call`) — `deploy-all.yml`
-invokes them rather than duplicating their steps a second time.
+`target: all` runs `cf-deploy.yml` + `kyma-deploy.yml` (the two primary,
+plain-CLI paths) — `piper-cf` is always an explicit, separate choice.
 
-Deploying by *runtime* rather than by *service* mirrors how these five
-services actually relate: the four CF-bound ones are a bound landscape
-(`api-gateway` calls `procurement-core`, which calls
-`legacy-erp-gateway`), not four independently-released products, so one
-pipeline sequencing them correctly is more honest than four separate
-gated jobs that happened to live in different files. It's specifically
-*testing* that benefits from staying split by service, not deploying.
+**`terraform apply` is not a step in `deploy.yml`.** It has its own
+standalone workflow, `infra/terraform`'s `terraform-apply.yml` — see that
+file's own header comment (and `deploy.yml`'s) for the full reasoning:
+infrastructure (subaccount, entitlements, the CF org/space and Kyma
+cluster themselves, XSUAA) changes rarely and is applied manually,
+standalone, whenever the landscape itself changes; application code
+(what `deploy.yml` pushes) changes on every commit that's ready to ship.
+Chaining `terraform apply` automatically into every code deploy would
+conflate two different lifecycles and needlessly re-touch infrastructure
+state for a change that's only about code. The real dependency is a
+**precondition**, not automatic chaining: `terraform-apply.yml` must have
+run at least once for a given environment before `deploy.yml` can
+meaningfully target it — `deploy.yml` will fail fast (cf/kubectl target a
+space/cluster that doesn't exist) if run out of order, which is the
+correct failure mode for a missing precondition.
 
-## Why not SAP's Piper GitHub Action
+All deploy workflows are real and complete but gated behind a typed
+`confirm` input and a per-environment GitHub Environment (which can
+require reviewers) — turning on real deployment is a repo-settings
+change, not a rewrite.
 
-SAP shipped `project-piper-action` as a GitHub Actions wrapper around
-Piper steps, but it's deprecated/archived upstream — Piper's GitHub
-Actions story moved to SAP's internal tooling. These workflows call
-`mbt`/`cf`/`kubectl` CLIs directly instead, which is the credible,
-currently-real path for GitHub Actions + SAP BTP, not a workaround.
+## Is Project Piper still real, and is it a Jenkins thing or a GitHub Actions thing?
+
+**Both, genuinely** — Piper's actual steps (`mtaBuild`, `cloudFoundryDeploy`,
+`kanikoExecute`, ...) aren't Jenkins-specific logic; they're implemented
+once, in Go, and distributed two ways: as the `piper-lib-os` **Jenkins
+shared library** (Groovy wrapper calling into the same Go steps —
+`Jenkinsfile.cf`/`Jenkinsfile.kyma`'s track), and as a **standalone Go
+binary** published on `SAP/jenkins-library`'s own GitHub releases
+(confirmed real: `wget https://github.com/SAP/jenkins-library/releases/latest/download/piper`),
+runnable from anywhere a CI runner can execute a binary — GitHub Actions
+included. What's genuinely **deprecated** is `project-piper-action`, SAP's
+old GitHub Actions *wrapper* around that binary — archived upstream, which
+is why `cf-deploy.yml`/`kyma-deploy.yml` call `mbt`/`cf`/`kubectl`
+directly rather than trying to run Piper steps through it. `piper-cf-deploy.yml`
+is the credible current replacement: install the real binary, call its
+subcommands (`piper mtaBuild`, `piper cloudFoundryDeploy`) directly as
+CLI flags — genuinely running Piper, from GitHub Actions, post-deprecation.
 
 ## Secrets these need before any deploy workflow can run for real
 
-`CF_USERNAME`/`CF_PASSWORD` (Cloud Foundry), `KYMA_KUBECONFIG`
-(base64-encoded kubeconfig for the Kyma cluster), plus the four Terraform
-secrets `deploy-all.yml` also needs (see `infra/terraform/README.md`) —
-none present in this repo, none needed until deployment is actually
-turned on.
+`CF_USERNAME`/`CF_PASSWORD` (Cloud Foundry — used by both `cf-deploy.yml`
+and `piper-cf-deploy.yml`), `KYMA_KUBECONFIG` (base64-encoded kubeconfig
+for the Kyma cluster), plus the four Terraform secrets
+`terraform-apply.yml`/`terraform-plan.yml` need (see
+`infra/terraform/README.md`) — none present in this repo, none needed
+until deployment is actually turned on.

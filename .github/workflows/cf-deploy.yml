@@ -6,13 +6,14 @@ name: cf deploy (all Cloud Foundry services)
 # independently-released products, so one pipeline that deploys and
 # sequences them correctly is the more honest shape than four separate
 # `if: false` jobs that all happened to exist in different files. Testing
-# stays per-service on purpose (procurement-core-ci.yml, ai-copilot-ci.yml,
-# etc.) - that split IS standard, real monorepo practice: a change to
-# ai-copilot shouldn't re-run procurement-core's test suite, and each PR
-# gets a fast, correctly-scoped status check. Deploying is the part that
+# stays per-service on purpose (test.yml - one file, real per-service
+# change-detection via dorny/paths-filter) - that split IS standard, real
+# monorepo practice: a change to ai-copilot shouldn't re-run
+# procurement-core's test suite, and each PR gets a fast, correctly-scoped
+# status check. Deploying is the part that
 # benefits from being one pipeline; testing is the part that doesn't.
 #
-# `workflow_call` lets deploy-all.yml invoke this as one step in the full
+# `workflow_call` lets deploy.yml invoke this as one option in the full
 # landscape sequence (terraform apply -> this -> kyma-deploy.yml);
 # `workflow_dispatch` lets it run standalone when only the CF side needs
 # redeploying. Both paths read `inputs.environment` via the same unified

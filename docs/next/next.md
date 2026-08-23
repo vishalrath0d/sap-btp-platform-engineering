@@ -1,7 +1,39 @@
 # Continuity notes — read this at the start of every session
 
-Last updated: 2026-08-23 (end of session 7 — local Docker/Compose stack,
-CI/CD for all 5 services incl. real Kyma manifests, resume-claim gap-check)
+Last updated: 2026-08-23 (end of session 9 — CI/CD restructuring per
+direct feedback: one test.yml with real change-detection, terraform
+decoupled from deploy, a real GitHub Actions Piper track, real monitoring,
+ABAP RAP/Integration Suite iFlow/TMS backlog filled — see below)
+
+### Session 9 — CI/CD restructuring (direct feedback, not a redesign from scratch)
+
+- **`test.yml` replaces 5 per-service `*-ci.yml` files.** Same real
+  change-detection property (a change to one service doesn't re-run every
+  other service's tests), one file instead of five - `dorny/paths-filter@v3`
+  (a real, standard action) drives a `changes` job, every service's own
+  job runs conditionally on its output. Jenkins mirrors this with its own
+  real built-in `when { changeset "..." }` directive on `Jenkinsfile.cf`/
+  `Jenkinsfile.kyma`'s Test stages - no third-party action needed there.
+- **`deploy-all.yml` renamed to `deploy.yml`, `terraform apply` removed
+  from it entirely.** Infra provisioning (`infra/terraform/
+  terraform-apply.yml`) and app deployment are two different lifecycles -
+  infra changes rarely and is applied standalone/manually; app code
+  changes on every ship-ready commit. `deploy.yml` now takes a `target`
+  input (`all`/`cf`/`kyma`/`piper-cf`) and routes to the right reusable
+  workflow instead of always running everything - see that file's own
+  header comment for the full terraform-vs-deploy dependency mapping.
+- **A real GitHub Actions Piper track added**: `piper-cf-deploy.yml`
+  installs the actual Piper Go binary (confirmed real, published on
+  `SAP/jenkins-library`'s GitHub releases) and calls `piper mtaBuild`/
+  `piper cloudFoundryDeploy` directly - Piper genuinely runs on both
+  Jenkins and GitHub Actions, only `project-piper-action` (the old GitHub
+  Actions *wrapper*) is deprecated, not Piper itself. Not yet live-verified
+  (flagged honestly in `ci-cd/piper/README.md`).
+- Real Prometheus + Grafana across all 5 services (see session 8 below),
+  and the full ABAP RAP / Integration Suite iFlow / Cloud Transport
+  Management backlog filled as real source (see `PROJECT_CHARTER.md`'s
+  "Scope expansion (session 8)" section) - both already covered in detail
+  there, not re-summarized here.
 
 ## Where things stand
 

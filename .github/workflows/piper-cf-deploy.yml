@@ -1,0 +1,108 @@
+name: piper cf deploy (GitHub Actions, real Piper binary)
+
+# Project Piper genuinely runs on both Jenkins AND GitHub Actions - it's
+# not either/or. Jenkinsfile.cf/Jenkinsfile.kyma are the Jenkins track
+# (piper-lib-os shared library, real steps called from Groovy). This file
+# is the GitHub Actions track using the SAME real Piper steps, not a
+# different tool with a similar name - SAP's own `project-piper-action`
+# GitHub Action wrapper is deprecated/archived upstream (confirmed against
+# its own repo, which is why cf-deploy.yml calls mbt/cf CLI directly
+# instead), but Piper's steps are also distributed as a standalone Go
+# binary (github.com/SAP/jenkins-library's own releases, confirmed real -
+# `wget https://github.com/SAP/jenkins-library/releases/latest/download/piper`)
+# that runs anywhere, GitHub Actions included. This workflow is that path
+# - the credible, currently-real way to run actual Piper steps (not just
+# "cf CLI directly") from GitHub Actions post-deprecation.
+#
+# Scoped to procurement-core/CF only, matching Jenkinsfile.cf's mtaBuild +
+# cloudFoundryDeploy steps - a Kyma-via-Piper-on-GitHub-Actions path isn't
+# built here (kyma-deploy.yml already covers Kyma via plain kubectl,
+# matching Jenkinsfile.kyma's own reasoning for not forcing a generic
+# Piper step to fit a multi-resource kubectl/envsubst sequence).
+#
+# CLI flag names below are sourced from `piper mtaBuild --help`/
+# `piper cloudFoundryDeploy --help` and project-piper.io's docs, not
+# exhaustively verified against a live run yet (no Jenkins/Piper-CLI
+# execution has happened in this project so far) - flagged honestly, same
+# level as this project's other not-yet-live-verified pieces (the two
+# candidate Terraform entitlements, the ABAP RAP/iFlow source). Passing
+# config explicitly as flags here rather than relying on `.pipeline/
+# config.yml` path resolution, since that file lives at the repo root
+# while the buildable directory is services/procurement-core/ - explicit
+# flags sidestep the relative-path ambiguity and are more transparent for
+# a showcase workflow anyway.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+    secrets:
+      CF_USERNAME:
+        required: true
+      CF_PASSWORD:
+        required: true
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Which environment to deploy"
+        required: true
+        type: choice
+        options: [dev, qa, prod]
+      confirm:
+        description: 'Type "deploy" to confirm you intend to run this against the real BTP account'
+        required: true
+
+jobs:
+  verify-confirmation:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify confirmation input
+        if: inputs.confirm != 'deploy'
+        run: |
+          echo "::error::Confirmation input must be exactly 'deploy' - got '${{ inputs.confirm }}'"
+          exit 1
+
+  piper-deploy:
+    needs: [verify-confirmation]
+    if: always() && needs.verify-confirmation.result != 'failure'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    defaults:
+      run:
+        working-directory: services/procurement-core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install the real Piper CLI binary
+        run: |
+          wget -q https://github.com/SAP/jenkins-library/releases/latest/download/piper
+          chmod +x piper
+          sudo mv piper /usr/local/bin/piper
+          piper version
+
+      - name: npm ci + cds build --production
+        run: |
+          npm ci
+          npx -p @sap/cds-dk cds build --production
+
+      - name: piper mtaBuild
+        run: piper mtaBuild --mtaBuildTool cloudMbt --platform CF
+
+      - name: piper cloudFoundryDeploy
+        env:
+          PIPER_username: ${{ secrets.CF_USERNAME }}
+          PIPER_password: ${{ secrets.CF_PASSWORD }}
+        run: |
+          piper cloudFoundryDeploy \
+            --deployType standard \
+            --mtaDeployParameters "-f --version-rule ALL" \
+            --mtaExtensionDescriptor mtaext-${{ inputs.environment }}.mtaext \
+            --apiEndpoint https://api.cf.us10.hana.ondemand.com \
+            --org procureiq-${{ inputs.environment }} \
+            --space ${{ inputs.environment }}

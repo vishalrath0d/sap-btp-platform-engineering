@@ -3,7 +3,8 @@ name: kyma deploy (all Kyma-bound services)
 # The Kyma-side counterpart to cf-deploy.yml - one file, even though it
 # currently deploys exactly one service (spend-anomaly-detector), because
 # the point is the same as cf-deploy.yml's: deploy is landscape-shaped,
-# test stays per-service (spend-anomaly-detector-ci.yml). Splitting deploy
+# test stays per-service (test.yml's spend-anomaly-detector job, gated on
+# its own path via dorny/paths-filter). Splitting deploy
 # by RUNTIME (CF vs Kyma) rather than by service is the real distinction
 # that matters here - the two tracks build genuinely different artifacts
 # (buildpack app vs. container image) and deploy through genuinely

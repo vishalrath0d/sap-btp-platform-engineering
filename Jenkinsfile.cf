@@ -40,24 +40,35 @@ pipeline {
     agent any
     stages {
 
+        // `when { changeset "..." }` is Jenkins Declarative Pipeline's own
+        // real, built-in mechanism for exactly this (not a plugin) - the
+        // same "only test the service that actually changed" property
+        // .github/workflows/test.yml's dorny/paths-filter job gives on the
+        // GitHub Actions side, expressed in Jenkins's own native syntax
+        // instead of a third-party action.
         stage('Test') {
             parallel {
                 stage('procurement-core') {
+                    when { changeset "services/procurement-core/**" }
                     steps { dir('services/procurement-core') { sh 'npm ci && npm test' } }
                 }
                 stage('ai-copilot') {
+                    when { changeset "services/ai-copilot/**" }
                     steps { dir('services/ai-copilot') { sh 'npm ci && npm test' } }
                 }
                 stage('api-gateway') {
+                    when { changeset "services/api-gateway/**" }
                     steps { dir('services/api-gateway') { sh 'npm ci && npm test' } }
                 }
                 stage('legacy-erp-gateway') {
+                    when { changeset "services/legacy-erp-gateway/**" }
                     steps { dir('services/legacy-erp-gateway') { sh 'npm ci && npm test' } }
                 }
             }
         }
 
         stage('Build MTA - procurement-core') {
+            when { changeset "services/procurement-core/**" }
             steps {
                 dir('services/procurement-core') {
                     // `-p @sap/cds-dk` pinned explicitly, not bare `npx

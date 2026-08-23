@@ -27,7 +27,12 @@ pipeline {
     }
     stages {
 
+        // `when { changeset "..." }` - same real, built-in Jenkins
+        // Declarative Pipeline mechanism Jenkinsfile.cf's Test stages use,
+        // here at the whole-stage level since this pipeline only ever
+        // covers the one service.
         stage('Test') {
+            when { changeset "services/spend-anomaly-detector/**" }
             steps {
                 dir('services/spend-anomaly-detector') {
                     sh 'npm ci && npm test'
@@ -36,6 +41,7 @@ pipeline {
         }
 
         stage('Build + push image') {
+            when { changeset "services/spend-anomaly-detector/**" }
             steps {
                 dir('services/spend-anomaly-detector') {
                     kanikoExecute script: this,
