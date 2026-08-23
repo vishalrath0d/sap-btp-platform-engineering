@@ -15,37 +15,37 @@ module "entitlements" {
   source        = "./modules/entitlements"
   subaccount_id = module.subaccount.id
 
+  # Every value below is real, from `btp list accounts/entitlement
+  # --subaccount <id>`'s actual output (run live, not guessed) plus the
+  # BTP cockpit's Entitlements -> Add Service Plans catalog for the two
+  # that don't show up in an already-granted listing. This replaces a
+  # prior version whose names were wrong in a specific, now-understood
+  # way: not "not entitled at all," but genuinely different real names
+  # for things already granted on this trial (cloudfoundry/standard vs.
+  # the real cloudfoundry/trial; hana-cloud-trial/hana-cloud-trial, which
+  # doesn't exist as an entitlement at all, vs. the real hana/hdi-shared;
+  # abap/trial vs. the real abap-trial/shared; integration-suite/trial
+  # vs. the real integrationsuite-trial/trial). All five are confirmed
+  # already granted (quota >= 1 each) - modules/entitlements' adaptive
+  # lookup should now match and adopt every one of them, not create any.
   entitlements = [
-    { service_name = "cloudfoundry", plan_name = "standard" },
+    { service_name = "cloudfoundry", plan_name = "trial" },
     # amount = 1 is real and required, not a guess: a live apply failed
     # here with "A quota was not set in the amount parameter" -
     # kymaruntime's entitlement category is SERVICE (numeric quota
     # required), unlike ELASTIC_SERVICE entitlements which don't take one
-    # at all. 1 is the standard trial Kyma quota.
+    # at all. 1 matches the real granted quota.
     { service_name = "kymaruntime", plan_name = "trial", amount = 1 },
-    { service_name = "hana-cloud-trial", plan_name = "hana-cloud-trial" },
-    # cloudfoundry/standard and hana-cloud-trial/hana-cloud-trial above
-    # both failed live apply too - "the global account is not entitled to
-    # this service plan" - a real, live-verified correction to this
-    # file's own earlier "confirmed correct" claim (terraform plan never
-    # validates against the live catalog, only apply does). Left as-is
-    # rather than guessing a replacement name: modules/entitlements is now
-    # adaptive (looks up what's already entitled, only creates what's
-    # missing) - since both are near-certainly already pre-granted on this
-    # trial by default, the adaptive lookup should just adopt them and
-    # skip trying to (re-)create them, regardless of what this file's
-    # guessed plan_name says. If the next live apply proves that wrong,
-    # fix here with the real value from `btp list accounts/entitlement`.
-    #
-    # abap/integration-suite below are genuinely NOT pre-granted (a
-    # different live error: same message, but these two are real "you
-    # don't have this yet" rejections, not "already exists" ones) - still
-    # unverified against the live catalog, corrected once the real plan
-    # names are confirmed via the BTP cockpit's Entitlements -> Add
-    # Service Plans catalog (no CLI equivalent for not-yet-assigned plans
-    # was found).
-    { service_name = "abap", plan_name = "trial" },
-    { service_name = "integration-suite", plan_name = "trial" },
+    # hana/hdi-shared's real granted quota is 10, not 1 - a real, non-1
+    # quota is itself a strong signal this is also a SERVICE-category
+    # entitlement needing an explicit amount, same reasoning as
+    # kymaruntime above. Matters only if this ever needs to actually
+    # create the entitlement (a real/paid account where it isn't
+    # pre-granted) - on this trial the adaptive lookup adopts the
+    # already-granted one and this value is never used to create anything.
+    { service_name = "hana", plan_name = "hdi-shared", amount = 10 },
+    { service_name = "abap-trial", plan_name = "shared" },
+    { service_name = "integrationsuite-trial", plan_name = "trial" },
   ]
 }
 

@@ -20,7 +20,10 @@ this deployer, verified with a real `mbt build` to actually produce the
 message for the concrete before/after — `cds build --production` doesn't
 emit these at all until the `[production]` profile targets `hana`).
 `infra/terraform/modules/entitlements` provisions the HDI-container-plan
-entitlement (`hana-cloud-trial`) this all depends on.
+entitlement (`hana`/`hdi-shared` — corrected via a real live `terraform
+apply` + `btp list accounts/entitlement` check from an earlier, wrong
+`hana-cloud-trial` guess that isn't a real entitlement at all; see
+`infra/terraform/README.md`) this all depends on.
 
 ## HANA Cloud Vector Engine
 

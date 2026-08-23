@@ -67,7 +67,16 @@ resources:
   - name: procurement-core-db
     type: com.sap.xs.hdi-container
     parameters:
-      service: hana-cloud-trial
+      # `hana`, not `hana-cloud-trial` - a real, live-verified correction
+      # (`btp list accounts/entitlement` shows the actual granted
+      # entitlement is `hana`/`hdi-shared`, quota 10 - no `hana-cloud-trial`
+      # exists at all). `hana` is the right service either way for an HDI
+      # CONTAINER (com.sap.xs.hdi-container above) - it's SAP's shared,
+      # multitenant HANA instance offering the hdi-shared plan, distinct
+      # from `hana-cloud` (a dedicated HANA Cloud instance you'd provision
+      # yourself, the wrong model for a lightweight HDI-container binding
+      # like this one).
+      service: hana
       service-plan: hdi-shared
 
   - name: procurement-core-xsuaa

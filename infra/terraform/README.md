@@ -192,13 +192,22 @@ predates XSUAA's auto-creation) — re-running `apply` a second time
 resolves it, the same class of "fresh subaccount might need two applies"
 note already given above for entitlements-then-environments.
 
-`abap`/`integration-suite`'s `plan_name` values are still unverified —
-these two are genuinely *not* pre-granted on this trial (a different live
-error: "not entitled," not "already exists"), so the adaptive lookup
-alone can't paper over a wrong guess for them the way it does for
-`cloudfoundry`/`hana-cloud-trial`. Confirming the real values needs the
-BTP cockpit's Entitlements → Add Service Plans catalog (no CLI command
-for not-yet-assigned plans was found) — still open.
+**Resolved**: `abap`/`integration-suite` turned out to be a naming
+problem too, not a real "not entitled" rejection — `btp list accounts/
+entitlement --subaccount <id>` (real command output, not guessed) showed
+both are already granted, just under different real names:
+`abap-trial`/`shared` and `integrationsuite-trial`/`trial` (confirmed
+against the cockpit's Entitlements → Add Service Plans catalog too — both
+show `100%` already assigned). Same for `cloudfoundry` (real:
+`cloudfoundry`/`trial`, not `standard`) and the HANA entitlement (real:
+`hana`/`hdi-shared`, quota 10 — `hana-cloud-trial` isn't a real
+entitlement name at all; `procurement-core/mta.yaml`'s HDI container
+resource had the identical wrong name and was fixed at the same time,
+before it could fail a real `cf deploy` later). `main.tf`'s
+`entitlements` module call now uses all five real, live-confirmed values
+— the next `terraform plan`/`apply` should show every entitlement
+adopted (0 created), with only the Kyma environment instance itself
+genuinely needing to be (re-)created.
 
 ## Known limitations (honesty notes)
 
