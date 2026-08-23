@@ -1,0 +1,42 @@
+name: scratch - mta cleanup
+
+# Temporary, one-time recovery action - not part of the real pipeline.
+# procurement-core's tracked MTA deployment (in the multiapps
+# deploy-service, not CF itself) accumulates "create failed" services
+# after every failed deploy attempt - the controller tries to "update"
+# them on the next run instead of "create", hitting
+# CF-ServiceInstanceNotFound. cf undeploy clears that stale tracked
+# state so the next real cf deploy starts clean. Delete this file once
+# run - this is expected to be reused a few times while iterating, not
+# a permanent pipeline step.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install cf CLI + multiapps plugin
+        run: |
+          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
+          sudo mv cf8 /usr/local/bin/cf
+          cf install-plugin -f multiapps
+      - name: cf login and undeploy the stuck procurement-core MTA
+        env:
+          CF_USERNAME: ${{ secrets.BTP_USERNAME }}
+          CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
+        run: |
+          cf api https://api.cf.us10-001.hana.ondemand.com
+          cf auth "$CF_USERNAME" "$CF_PASSWORD"
+          cf target -o 4cbf0c12trial -s dev
+          # --delete-services only touches services this MTA's own
+          # descriptor tracks (procurement-core-db, procurement-core-
+          # xsuaa) - procureiq-dev-hana-cloud is a separate, non-MTA-
+          # managed cf create-service instance, never referenced by
+          # procurement-core's descriptor, so it's unaffected (confirmed
+          # by the earlier real run of this same command: only those two
+          # were deleted).
+          cf undeploy procurement-core --delete-services -f || true
+          echo "=== remaining services in dev ==="
+          cf services
