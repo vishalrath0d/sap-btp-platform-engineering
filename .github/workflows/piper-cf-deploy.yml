@@ -118,6 +118,6 @@ jobs:
             --deployType standard \
             --mtaDeployParameters "-f --version-rule ALL" \
             --mtaExtensionDescriptor mtaext-${{ inputs.environment }}.mtaext \
-            --apiEndpoint https://api.cf.us10.hana.ondemand.com \
+            --apiEndpoint https://api.cf.us10-001.hana.ondemand.com \
             --org 4cbf0c12trial \
             --space ${{ inputs.environment }}

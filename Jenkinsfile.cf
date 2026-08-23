@@ -36,7 +36,7 @@
 // `cf orgs`), not 'procureiq-dev' - see .github/workflows/cf-deploy.yml's
 // identical comment for why. Update this literal if the org ever changes.
 def cfTarget = [
-    apiEndpoint  : 'https://api.cf.us10.hana.ondemand.com',
+    apiEndpoint  : 'https://api.cf.us10-001.hana.ondemand.com',
     org          : '4cbf0c12trial',
     space        : 'dev',
     credentialsId: 'procureiq-cf-credentials',
