@@ -45,6 +45,25 @@ name: deploy
 # out of order, which is the correct failure mode for a missing
 # precondition, not something this workflow should paper over by quietly
 # running terraform itself.
+#
+# Explicit `permissions:` below, real GitHub Actions requirement hit
+# live: a reusable-workflow call is statically validated against ALL
+# `uses:` references in this file up front, before any `if:` condition
+# is evaluated at runtime - so even a target=cf run that never touches
+# kyma-deploy.yml still fails to start ("Invalid workflow file...is only
+# allowed 'packages: read'") if kyma-deploy.yml's own `packages: write`
+# (needed for its GHCR image push) exceeds this caller's permission
+# ceiling. This repo's default workflow permissions are `read`
+# (Settings > Actions > General), so without this block every reusable
+# call here - including the cf/piper-cf ones that don't need it - was
+# capped there too. Granting it explicitly here, once, at the one file
+# that calls all four, is more scoped than raising the repo-wide
+# default (which would hand packages: write to every other workflow -
+# the CI-only ones included - whether they need it or not).
+
+permissions:
+  contents: read
+  packages: write
 
 on:
   workflow_dispatch:
