@@ -18,7 +18,7 @@ infra/terraform/
 │   ├── cloudfoundry-env/
 │   ├── kyma-env/
 │   ├── xsuaa/                (service instance + binding)
-│   ├── role-collections/     (two-phase, see modules/xsuaa's comments)
+│   ├── role-collections/     (reads xsuaa's output directly - single apply, see that module)
 │   └── destination/          (Cloud Connector counterpart, not yet instantiated)
 └── environments/
     ├── dev/terraform.tfvars    # ONLY variable values - real, usable today
@@ -89,7 +89,6 @@ Actions), never in a committed file:
 | `TF_CLOUD_ORGANIZATION` | Your HCP Terraform org name (e.g. `vishalrath0d-tf-org`) |
 | `BTP_USERNAME` | SAP Universal ID used to log into the BTP trial |
 | `BTP_PASSWORD` | Its password |
-| `XSUAA_XSAPPNAME` | Leave unset until the two-phase apply below reaches step 2 |
 
 Plus, in HCP Terraform itself: create the `procureiq-dev` workspace via
 the **CLI-Driven Workflow** (not "Version control" — that would have HCP
@@ -102,17 +101,24 @@ Also confirm the subaccount's exact region and global account subdomain
 in the BTP cockpit; update `environments/dev/terraform.tfvars` if they
 differ from what's there.
 
-## Two-phase apply for XSUAA role collections
+## XSUAA role collections — single apply, not two
 
-1. First `terraform apply` — creates the subaccount lookup, entitlements,
-   CF + Kyma environments, and the XSUAA instance + binding.
-   `role_collections` no-ops (empty for_each) since `xsuaa_xsappname` is
-   still null.
-2. Read the real xsappname: `terraform output -json xsuaa_credentials`
-   (sensitive — don't paste it anywhere public) and extract `xsappname`.
-3. Set it as the `XSUAA_XSAPPNAME` GitHub secret, wire it into
-   `terraform-apply.yml` as `TF_VAR_xsuaa_xsappname`, apply again — now
-   `role_collections` actually creates the three collections.
+`role_collections` reads the real xsappname directly from
+`module.xsuaa.credentials` (decoded inline in
+`modules/role-collections/main.tf`) rather than needing it supplied as a
+separate variable. An earlier version of this module required a manual
+two-phase apply (apply once, read `terraform output`, set a variable,
+apply again) — that was a design mistake in how the module used
+`for_each`, not a real Terraform limitation: **a resource's *attributes*
+can depend on values only known after another resource is created in the
+same apply** (completely standard — e.g. a subnet ID referencing a VPC
+created moments earlier in the same run); only `for_each`/`count`
+genuinely cannot. The fix was making `for_each` fixed (always the 3 role
+collections) and only the `role_template_app_id` *attribute* depend on
+the XSUAA binding's output. One `terraform apply` now creates the
+subaccount lookup, entitlements, CF/Kyma environments, XSUAA instance +
+binding, *and* the role collections referencing it, correctly sequenced,
+in a single run.
 
 ## What's verified vs. what needs a live account to verify
 
@@ -123,10 +129,32 @@ memory. `terraform init -backend=false && terraform validate` passes
 `organization`/`workspaces.name`, which need real CI-supplied values to
 resolve, while still fully type-checking every module).
 
-Not yet verified without live credentials:
-- Exact entitlement `service_name`/`plan_name` values (commonly-documented
-  trial values; first real `plan` is the verification step).
-- Kyma's exact trial `plan_name`.
+**Update — verified live**: a real `terraform plan` against the actual
+HCP Terraform workspace and BTP trial credentials ran clean
+(`Plan: 6 to add, 0 to change, 0 to destroy`) after fixing several real
+issues a schema-only validate couldn't catch — see git history on the
+`terraform/first-plan-run` branch/PR for the full sequence:
+`data.btp_subaccount` needs `region` alongside `subdomain` (not just
+`subdomain` — the schema marks both individually optional, the API
+requires both together); the real subaccount/global-account subdomains
+differed from what was assumed (`4cbf0c12trial` vs. `4cbf0c12trial-ga` —
+confirmed directly in the cockpit, not guessed twice); the trial's
+default Cloud Foundry org **cannot be deleted** (`cf delete-org` →
+"not authorized"), so `modules/cloudfoundry-env` and `modules/kyma-env`
+now look up what's already provisioned and only create what's actually
+missing (`count = exists ? 0 : 1`) — the same module works correctly on
+this trial (adopts CF, creates Kyma, since Kyma is confirmed not yet
+enabled) and on a fresh/real subaccount (creates both); `depends_on` on a
+module forces its data sources to defer to apply-time, which breaks
+`count` evaluation — removed, with the real practical implication
+documented (a genuinely fresh subaccount with zero entitlements might
+need two applies the first time, same class of issue as any resource
+whose count depends on another resource's existence).
+
+Entitlement `service_name`/`plan_name` values (`cloudfoundry/standard`,
+`hana-cloud-trial/hana-cloud-trial`, `kymaruntime/trial`) and Kyma's
+trial `plan_name` are now confirmed correct — the live plan proposed
+creating them without error.
 
 ## Known limitations (honesty notes)
 
@@ -134,3 +162,9 @@ Not yet verified without live credentials:
   provides one. Real multi-env promotion needs a paid landscape.
 - Kyma provisioning genuinely takes 15-20 minutes; expect `apply` to sit
   on that resource for a while.
+- The adaptive CF/Kyma modules have only been proven against *this*
+  trial's actual state (CF pre-existing, Kyma not) — the "creates on a
+  fresh subaccount" half of the claim is architecturally sound and
+  follows directly from how the lookup/count logic works, but hasn't
+  been run against a genuinely empty subaccount to observe the create
+  path fire for real.

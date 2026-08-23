@@ -37,12 +37,10 @@ env:
   # from here instead.
   TF_VAR_btp_username: ${{ secrets.BTP_USERNAME }}
   TF_VAR_btp_password: ${{ secrets.BTP_PASSWORD }}
-  # Empty/unset until the two-phase XSUAA apply's step 2 (see
-  # infra/terraform/README.md) - Terraform's own default (null) for
-  # xsuaa_xsappname makes role_collections no-op safely until then, so
-  # this being unset is the correct starting state, not a placeholder to
-  # fill in before the first apply.
-  TF_VAR_xsuaa_xsappname: ${{ secrets.XSUAA_XSAPPNAME }}
+  # No XSUAA_XSAPPNAME secret needed anymore - role_collections now reads
+  # the real xsappname directly from module.xsuaa's own output within the
+  # same apply (see infra/terraform/modules/role-collections/main.tf),
+  # not from a manually-supplied variable requiring a second apply.
 
 defaults:
   run:

@@ -30,12 +30,6 @@ variable "kyma_administrators" {
   type        = list(string)
 }
 
-variable "xsuaa_xsappname" {
-  description = "Set only after modules/xsuaa's binding has been created once - see this folder's README for the two-phase apply this requires."
-  type        = string
-  default     = null
-}
-
 variable "environment" {
   description = "Which environment this apply targets - drives naming (procureiq-<environment>) and must match the terraform.tfvars file actually being used (environments/<environment>/terraform.tfvars). No default on purpose: forgetting to set this should fail loudly, not silently default to dev."
   type        = string

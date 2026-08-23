@@ -63,9 +63,13 @@ module "xsuaa" {
 }
 
 module "role_collections" {
-  source          = "./modules/role-collections"
-  subaccount_id   = module.subaccount.id
-  xsuaa_xsappname = var.xsuaa_xsappname
+  # xsuaa_credentials_json creates an implicit dependency on module.xsuaa
+  # automatically - no explicit depends_on needed, and (unlike the old
+  # xsuaa_xsappname variable this replaced) no manual two-phase apply
+  # either. See modules/role-collections/main.tf.
+  source                 = "./modules/role-collections"
+  subaccount_id          = module.subaccount.id
+  xsuaa_credentials_json = module.xsuaa.credentials
 
   role_collections = [
     { name = "ProcureIQ Requester", description = "Business users who raise Purchase Requisitions", role_template_name = "Requester" },
