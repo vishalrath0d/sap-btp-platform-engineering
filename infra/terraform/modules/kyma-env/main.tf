@@ -1,12 +1,32 @@
 # Adaptive, same pattern as modules/cloudfoundry-env: look up what's
-# already provisioned, only create what's missing. Confirmed on this
-# actual trial subaccount that Kyma is genuinely NOT pre-provisioned
-# (cockpit shows "You are currently not using Kyma capabilities" +
-# an "Enable Kyma" button) - unlike Cloud Foundry, so the create branch
-# is what actually runs here. Kept adaptive anyway, not hardcoded to
-# "always create": a real/non-trial subaccount, or this same trial after
-# Kyma is manually enabled before Terraform ever runs, both need the
-# lookup branch to correctly adopt rather than fail on a duplicate.
+# already provisioned, only create what's missing.
+#
+# Real, structural finding from two consecutive live apply failures on
+# this trial (both `environment instance is in failed state:
+# CREATION_FAILED`, both in ~40s - too fast to be real provisioning,
+# which takes 15-25 minutes): **trial Kyma clusters cannot be created
+# through this resource's generic environment-instance API at all** - the
+# cockpit's own Kyma Environment tab surfaced the real reason Terraform's
+# error didn't: "To request a trial Kyma cluster, follow the instructions
+# in Getting Started with a Trial Kyma Instance" - a cockpit-only "Enable
+# Kyma" action, confirmed against SAP's own docs and a matching real
+# GitHub issue on SAP/terraform-provider-btp reporting the identical
+# "unauthorized" behavior for trial Kyma creation via this API. Not a
+# code bug, not fixable from Terraform's side - the same class of
+# genuinely account-side manual step this project already documents for
+# ABAP RAP/Integration Suite authoring.
+#
+# What this module still does correctly: once a trial Kyma cluster is
+# created via the cockpit's "Enable Kyma" flow, this module's adaptive
+# lookup (below) will find it and ADOPT it (0 create needed) on the next
+# plan/apply - no code change needed for that half, only the initial
+# creation needs the manual cockpit step. The `resource` block below stays
+# real and correct for a non-trial/paid subaccount, where this API
+# restriction is not expected to apply.
+#
+# Also worth knowing, confirmed in SAP's own docs while researching this:
+# trial Kyma clusters auto-expire and are deleted 14 days after creation -
+# not a one-time setup, a real recurring operational fact for trial use.
 data "btp_subaccount_environment_instances" "all" {
   subaccount_id = var.subaccount_id
 }

@@ -213,8 +213,21 @@ genuinely needing to be (re-)created.
 
 - No genuinely separate `qa`/`prod` subaccounts yet — the trial only
   provides one. Real multi-env promotion needs a paid landscape.
-- Kyma provisioning genuinely takes 15-20 minutes; expect `apply` to sit
-  on that resource for a while.
+- **Trial Kyma clusters can't be created via `terraform apply` at all** —
+  confirmed via two real, consecutive `CREATION_FAILED` apply failures
+  (both in ~40s, both a fast rejection, not real provisioning): the
+  cockpit's own Kyma tab shows the real reason ("To request a trial Kyma
+  cluster, follow the instructions in Getting Started with a Trial Kyma
+  Instance"), matching a real GitHub issue on `SAP/terraform-provider-btp`
+  reporting the identical "unauthorized" behavior for trial Kyma via this
+  API. The one-time fix is a manual cockpit step (Kyma Environment tab →
+  "Enable Kyma") — `modules/kyma-env`'s adaptive lookup then correctly
+  adopts it on the next plan/apply, no Terraform change needed for that
+  half. Also confirmed in SAP's own docs while chasing this down: a trial
+  Kyma cluster auto-expires and is deleted 14 days after creation.
+- Kyma provisioning genuinely takes 15-25 minutes once actually
+  triggered (via the cockpit, per above — not via `apply`, which fails
+  fast on trial); expect to wait there.
 - The adaptive CF/Kyma modules have only been proven against *this*
   trial's actual state (CF pre-existing, Kyma not) — the "creates on a
   fresh subaccount" half of the claim is architecturally sound and
