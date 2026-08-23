@@ -1,0 +1,31 @@
+name: scratch - hana create check
+
+# Temporary, throwaway diagnostic - isolates whether the "unexpected end
+# of JSON input" broker error is a real "you must supply parameters"
+# requirement or a Terraform-provider-specific serialization quirk, by
+# calling the broker directly via cf create-service instead of through
+# Terraform. Delete this file once that's captured.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install cf CLI
+        run: |
+          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
+          sudo mv cf8 /usr/local/bin/cf
+      - name: cf login and try creating the HANA Cloud instance directly
+        env:
+          CF_USERNAME: ${{ secrets.BTP_USERNAME }}
+          CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
+        run: |
+          cf api https://api.cf.us10-001.hana.ondemand.com
+          cf auth "$CF_USERNAME" "$CF_PASSWORD"
+          cf target -o 4cbf0c12trial -s dev
+          echo "=== create-service, no parameters at all ==="
+          cf create-service hana-cloud hana-free scratch-hana-check || true
+          echo "=== service status ==="
+          cf service scratch-hana-check || true
