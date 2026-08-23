@@ -42,6 +42,11 @@ name: piper cf deploy (GitHub Actions, real Piper binary)
 # is what supplies the real value, since a Cloud Foundry org on BTP
 # authenticates with the same SAP Universal ID as the cockpit login - no
 # separate CF-specific secret is actually stored in this repo.
+#
+# `resolve-cf-org` reads the real CF org name from Terraform's
+# `cloudfoundry_org_name` output rather than hardcoding `procureiq-<env>`
+# - same real bug/fix as cf-deploy.yml's own comment documents (this
+# trial's actual org is SAP-assigned, '4cbf0c12trial', confirmed live).
 
 on:
   workflow_call:
@@ -53,6 +58,10 @@ on:
       CF_USERNAME:
         required: true
       CF_PASSWORD:
+        required: true
+      TF_API_TOKEN:
+        required: true
+      TF_CLOUD_ORGANIZATION:
         required: true
   workflow_dispatch:
     inputs:
@@ -76,8 +85,31 @@ jobs:
           echo "::error::Confirmation input must be exactly 'deploy' - got '${{ inputs.confirm }}'"
           exit 1
 
-  piper-deploy:
+  resolve-cf-org:
     needs: [verify-confirmation]
+    if: always() && needs.verify-confirmation.result != 'failure'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+    outputs:
+      org_name: ${{ steps.get-org.outputs.org_name }}
+    env:
+      TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
+      TF_WORKSPACE: procureiq-${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+      - name: terraform init
+        run: terraform init
+      - name: Read the real CF org name
+        id: get-org
+        run: echo "org_name=$(terraform output -raw cloudfoundry_org_name)" >> "$GITHUB_OUTPUT"
+
+  piper-deploy:
+    needs: [verify-confirmation, resolve-cf-org]
     if: always() && needs.verify-confirmation.result != 'failure'
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
@@ -115,5 +147,5 @@ jobs:
             --mtaDeployParameters "-f --version-rule ALL" \
             --mtaExtensionDescriptor mtaext-${{ inputs.environment }}.mtaext \
             --apiEndpoint https://api.cf.us10.hana.ondemand.com \
-            --org procureiq-${{ inputs.environment }} \
+            --org "${{ needs.resolve-cf-org.outputs.org_name }}" \
             --space ${{ inputs.environment }}

@@ -46,6 +46,20 @@ name: cf deploy (all Cloud Foundry services)
 # standalone via `workflow_dispatch` instead (bypassing `deploy.yml`)
 # would need real `CF_USERNAME`/`CF_PASSWORD` repo secrets to exist too -
 # not yet created, since `deploy.yml` is the path actually used so far.
+#
+# `resolve-cf-org` below reads the real CF org name from Terraform's
+# `cloudfoundry_org_name` output instead of every job hardcoding
+# `procureiq-<env>` - real bug hit live: this trial's actual org is
+# SAP-assigned ('4cbf0c12trial', confirmed via `cf orgs`), not
+# 'procureiq-dev' - modules/cloudfoundry-env's adaptive lookup adopted
+# the pre-existing org rather than creating a second one (trial accounts
+# don't allow that, same shape as the Kyma restriction), so the
+# `procureiq-<env>` name was never real anywhere. On a real paid account
+# with no pre-existing org, Terraform's output returns the created
+# 'procureiq-<env>' name instead - reading the output is correct either
+# way, hardcoding never was. Needs TF_API_TOKEN/TF_CLOUD_ORGANIZATION to
+# read Terraform Cloud's remote state - a read, not an apply, so this
+# doesn't re-couple deploy to running terraform itself.
 
 on:
   workflow_dispatch:
@@ -68,6 +82,10 @@ on:
         required: true
       CF_PASSWORD:
         required: true
+      TF_API_TOKEN:
+        required: true
+      TF_CLOUD_ORGANIZATION:
+        required: true
 
 jobs:
   verify-confirmation:
@@ -80,8 +98,31 @@ jobs:
           echo "::error::Confirmation input must be exactly 'deploy' - got '${{ inputs.confirm }}'"
           exit 1
 
-  procurement-core:
+  resolve-cf-org:
     needs: [verify-confirmation]
+    if: always() && needs.verify-confirmation.result != 'failure'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra/terraform
+    outputs:
+      org_name: ${{ steps.get-org.outputs.org_name }}
+    env:
+      TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
+      TF_WORKSPACE: procureiq-${{ inputs.environment }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          cli_config_credentials_token: ${{ secrets.TF_API_TOKEN }}
+      - name: terraform init
+        run: terraform init
+      - name: Read the real CF org name
+        id: get-org
+        run: echo "org_name=$(terraform output -raw cloudfoundry_org_name)" >> "$GITHUB_OUTPUT"
+
+  procurement-core:
+    needs: [verify-confirmation, resolve-cf-org]
     if: always() && needs.verify-confirmation.result != 'failure'
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
@@ -120,11 +161,11 @@ jobs:
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
-          cf target -o procureiq-${{ inputs.environment }} -s ${{ inputs.environment }}
+          cf target -o "${{ needs.resolve-cf-org.outputs.org_name }}" -s ${{ inputs.environment }}
           cf deploy mta_archives/*.mtar -e mtaext-${{ inputs.environment }}.mtaext --no-confirm
 
   ai-copilot:
-    needs: [verify-confirmation]
+    needs: [verify-confirmation, resolve-cf-org]
     if: always() && needs.verify-confirmation.result != 'failure'
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
@@ -144,11 +185,11 @@ jobs:
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
-          cf target -o procureiq-${{ inputs.environment }} -s ${{ inputs.environment }}
+          cf target -o "${{ needs.resolve-cf-org.outputs.org_name }}" -s ${{ inputs.environment }}
           cf push -f manifest.yml
 
   legacy-erp-gateway:
-    needs: [verify-confirmation]
+    needs: [verify-confirmation, resolve-cf-org]
     if: always() && needs.verify-confirmation.result != 'failure'
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
@@ -168,7 +209,7 @@ jobs:
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
-          cf target -o procureiq-${{ inputs.environment }} -s ${{ inputs.environment }}
+          cf target -o "${{ needs.resolve-cf-org.outputs.org_name }}" -s ${{ inputs.environment }}
           cf push -f manifest.yml
 
   spend-anomaly-detector:
@@ -177,7 +218,7 @@ jobs:
     # HANA binding needed (the K8s ServiceInstance/ServiceBinding in k8s/
     # were only ever for Kyma's APIRule-level auth, which has no CF
     # equivalent wired up here - stated in manifest.yml, not hidden).
-    needs: [verify-confirmation]
+    needs: [verify-confirmation, resolve-cf-org]
     if: always() && needs.verify-confirmation.result != 'failure'
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
@@ -197,13 +238,13 @@ jobs:
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
-          cf target -o procureiq-${{ inputs.environment }} -s ${{ inputs.environment }}
+          cf target -o "${{ needs.resolve-cf-org.outputs.org_name }}" -s ${{ inputs.environment }}
           cf push -f manifest.yml
 
   api-gateway:
     # The one real ordering dependency in this landscape: api-gateway
     # needs procurement-core's live route to set PROCUREMENT_CORE_URL.
-    needs: [procurement-core]
+    needs: [procurement-core, resolve-cf-org]
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     defaults:
@@ -222,7 +263,7 @@ jobs:
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
-          cf target -o procureiq-${{ inputs.environment }} -s ${{ inputs.environment }}
+          cf target -o "${{ needs.resolve-cf-org.outputs.org_name }}" -s ${{ inputs.environment }}
           cf push -f manifest.yml
           CORE_GUID=$(cf app procurement-core-srv --guid)
           CORE_URL=$(cf curl "/v3/apps/${CORE_GUID}/routes" | jq -r '.resources[0].url')
@@ -238,7 +279,7 @@ jobs:
     # here pointed at real CF routes instead of container names. A real,
     # pre-existing gap closed while adding spend-anomaly-detector's CF
     # path - legacy-erp-gateway's URL was never wired here before either.
-    needs: [procurement-core, spend-anomaly-detector, legacy-erp-gateway]
+    needs: [procurement-core, spend-anomaly-detector, legacy-erp-gateway, resolve-cf-org]
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
     steps:
@@ -253,7 +294,7 @@ jobs:
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
-          cf target -o procureiq-${{ inputs.environment }} -s ${{ inputs.environment }}
+          cf target -o "${{ needs.resolve-cf-org.outputs.org_name }}" -s ${{ inputs.environment }}
 
           ANOMALY_GUID=$(cf app spend-anomaly-detector --guid)
           ANOMALY_URL=$(cf curl "/v3/apps/${ANOMALY_GUID}/routes" | jq -r '.resources[0].url')

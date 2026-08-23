@@ -32,9 +32,25 @@
 
 @Library('piper-lib-os') _
 
+// `org` is deliberately a build parameter, not hardcoded 'procureiq-dev'
+// - real bug hit live on the GitHub Actions side (.github/workflows/
+// cf-deploy.yml's own comment): a trial subaccount's CF org is
+// SAP-assigned ('4cbf0c12trial', confirmed via `cf orgs`), not a name
+// this project chose, because modules/cloudfoundry-env's Terraform
+// adopts whatever org already exists rather than creating a second one
+// (trial accounts don't allow that). On a real paid account with no
+// pre-existing org, Terraform creates and this would correctly be
+// 'procureiq-<env>' instead. Read the real value with
+// `terraform output -raw cloudfoundry_org_name` (from infra/terraform)
+// and pass it as `-DCF_ORG=<value>` when triggering this build - this
+// pipeline never assumes the name, same as cf-deploy.yml's
+// resolve-cf-org job. Not yet exercised against a live Jenkins instance
+// (see this file's own honesty note below), so this parameterization is
+// designed-correct but unverified end-to-end, the same caveat this
+// project's other not-yet-live-Jenkins pieces carry.
 def cfTarget = [
     apiEndpoint  : 'https://api.cf.us10.hana.ondemand.com',
-    org          : 'procureiq-dev',
+    org          : params.CF_ORG ?: 'procureiq-dev',
     space        : 'dev',
     credentialsId: 'procureiq-cf-credentials',
 ]
