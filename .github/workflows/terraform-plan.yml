@@ -4,12 +4,21 @@ name: terraform plan (dev)
 # automatically. Posts the plan as a PR comment so a review can happen
 # without anyone needing to run terraform locally at all, which is the
 # point of not applying from a laptop in the first place.
+#
+# Also runnable on demand (`workflow_dispatch`) - a real gap this exposed:
+# a PR merging is a `push`, not a `pull_request`, so this workflow
+# correctly stays silent on merge (by design, not a bug - it's not meant
+# to re-run automatically post-merge). But that left no way to get a
+# fresh plan against `main` right before running terraform-apply.yml,
+# which is exactly when you'd want one. `workflow_dispatch` fixes that
+# without changing the PR-triggered behavior at all.
 
 on:
   pull_request:
     paths:
       - "infra/terraform/**"
       - ".github/workflows/terraform-plan.yml"
+  workflow_dispatch: {}
 
 env:
   # One shared root module (infra/terraform/) for every environment - this
@@ -59,6 +68,11 @@ jobs:
         continue-on-error: true
 
       - name: Post plan as PR comment
+        # Only meaningful on a real pull_request event - context.issue.number
+        # doesn't exist for a workflow_dispatch run (there's no PR to
+        # comment on), so this step is skipped there; the plan output is
+        # still fully visible in this job's own log either way.
+        if: github.event_name == 'pull_request'
         uses: actions/github-script@v7
         # Real bug hit on this exact PR: `${{ steps.plan.outputs.stdout }}`
         # (the wrapper output hashicorp/setup-terraform's `wrapper: true`
