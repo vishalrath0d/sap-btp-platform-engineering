@@ -106,8 +106,6 @@ jobs:
     secrets:
       CF_USERNAME: ${{ secrets.BTP_USERNAME }}
       CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
-      TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
-      TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
 
   kyma-deploy:
     needs: verify-confirmation
@@ -127,8 +125,6 @@ jobs:
     secrets:
       CF_USERNAME: ${{ secrets.BTP_USERNAME }}
       CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
-      TF_API_TOKEN: ${{ secrets.TF_API_TOKEN }}
-      TF_CLOUD_ORGANIZATION: ${{ secrets.TF_CLOUD_ORGANIZATION }}
 
   piper-kyma-deploy:
     needs: verify-confirmation
