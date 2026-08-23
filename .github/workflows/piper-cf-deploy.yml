@@ -32,16 +32,19 @@ name: piper cf deploy (GitHub Actions, real Piper binary)
 # flags sidestep the relative-path ambiguity and are more transparent for
 # a showcase workflow anyway.
 #
-# PIPER_username/PIPER_password source from secrets.CF_USERNAME/
-# CF_PASSWORD - this workflow's own declared `workflow_call.secrets`
-# parameters (a reusable workflow's `secrets.*` context is scoped to
-# exactly what it declares, not the full repo secret store - real
-# constraint, hit live via a startup_failure and confirmed with
-# `actionlint`, the same finding cf-deploy.yml's own comment documents).
-# `deploy.yml`'s passthrough (`CF_USERNAME: ${{ secrets.BTP_USERNAME }}`)
-# is what supplies the real value, since a Cloud Foundry org on BTP
-# authenticates with the same SAP Universal ID as the cockpit login - no
-# separate CF-specific secret is actually stored in this repo.
+# PIPER_username/PIPER_password source from secrets.BTP_USERNAME/
+# secrets.BTP_PASSWORD - this workflow's own declared
+# `workflow_call.secrets` parameters, named to match the real repo
+# secrets directly rather than translated through a separate
+# CF_USERNAME/CF_PASSWORD name (an earlier version did that; pure
+# indirection, since a Cloud Foundry org on BTP authenticates with the
+# same SAP Universal ID as the cockpit login - there's no separate
+# CF-specific credential to name differently). `deploy.yml`'s passthrough
+# is a straight 1:1 pass: `BTP_USERNAME: ${{ secrets.BTP_USERNAME }}`.
+# Reusable-workflow `secrets.*` is scoped to exactly what
+# `workflow_call.secrets` declares, not the full repo secret store - real
+# constraint, hit live as a startup_failure, confirmed statically with
+# `actionlint` (the same finding cf-deploy.yml's own comment documents).
 
 on:
   workflow_call:
@@ -50,9 +53,9 @@ on:
         required: true
         type: string
     secrets:
-      CF_USERNAME:
+      BTP_USERNAME:
         required: true
-      CF_PASSWORD:
+      BTP_PASSWORD:
         required: true
   workflow_dispatch:
     inputs:
@@ -107,8 +110,8 @@ jobs:
 
       - name: piper cloudFoundryDeploy
         env:
-          PIPER_username: ${{ secrets.CF_USERNAME }}
-          PIPER_password: ${{ secrets.CF_PASSWORD }}
+          PIPER_username: ${{ secrets.BTP_USERNAME }}
+          PIPER_password: ${{ secrets.BTP_PASSWORD }}
         run: |
           piper cloudFoundryDeploy \
             --deployType standard \

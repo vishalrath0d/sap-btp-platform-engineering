@@ -104,8 +104,8 @@ jobs:
     with:
       environment: ${{ inputs.environment }}
     secrets:
-      CF_USERNAME: ${{ secrets.BTP_USERNAME }}
-      CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
+      BTP_USERNAME: ${{ secrets.BTP_USERNAME }}
+      BTP_PASSWORD: ${{ secrets.BTP_PASSWORD }}
 
   kyma-deploy:
     needs: verify-confirmation
@@ -123,8 +123,8 @@ jobs:
     with:
       environment: ${{ inputs.environment }}
     secrets:
-      CF_USERNAME: ${{ secrets.BTP_USERNAME }}
-      CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
+      BTP_USERNAME: ${{ secrets.BTP_USERNAME }}
+      BTP_PASSWORD: ${{ secrets.BTP_PASSWORD }}
 
   piper-kyma-deploy:
     needs: verify-confirmation
