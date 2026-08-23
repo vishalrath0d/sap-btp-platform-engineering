@@ -1,0 +1,34 @@
+name: scratch - marketplace check
+
+# Temporary, throwaway diagnostic - not part of the real pipeline set.
+# Lists the real marketplace so the HANA Cloud plan name that actually
+# creates a database (not just an HDI container) can be read from live
+# output instead of guessed, the same verification discipline this
+# project's other real-vs-guessed BTP names followed. Delete this file
+# once that's captured.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install cf CLI
+        run: |
+          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
+          sudo mv cf8 /usr/local/bin/cf
+      - name: cf login and list marketplace
+        env:
+          CF_USERNAME: ${{ secrets.BTP_USERNAME }}
+          CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
+        run: |
+          cf api https://api.cf.us10-001.hana.ondemand.com
+          cf auth "$CF_USERNAME" "$CF_PASSWORD"
+          cf target -o 4cbf0c12trial -s dev
+          echo "=== full marketplace ==="
+          cf marketplace
+          echo "=== hana offering detail ==="
+          cf marketplace -e hana || true
+          echo "=== hana-cloud-trial offering detail (if it exists) ==="
+          cf marketplace -e hana-cloud-trial || true
