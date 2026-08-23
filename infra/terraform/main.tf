@@ -96,11 +96,30 @@ module "kyma_env" {
 }
 
 module "hana_cloud" {
-  # Real gap found only once procurement-core's MTA deploy actually ran:
-  # "hana"/"hdi-shared" (see modules/entitlements) provisions HDI
-  # containers on an existing database, it doesn't create one - this
-  # module creates that database. See modules/hana-cloud/main.tf's
-  # header for the full real-error trail.
+  # Gated to 0 (destroys the one this module previously created) - real
+  # capability boundary found live, not a bug in this module's own code:
+  # `btp_subaccount_service_instance` creates a Service-Manager/
+  # subaccount-scoped instance, confirmed via `cf curl /v3/service_
+  # instances?names=...` returning zero results for it in the dev CF
+  # space, and via the BTP cockpit's own Space > Service Instances view
+  # (screenshot evidence) never listing it - the "hana"/"hdi-shared"
+  # broker needs a database visible to the CF *space* specifically ("no
+  # database available... in space 'dev'"), which this resource type
+  # cannot produce. Exhaustively checked the real provider schema
+  # (v1.26.0, every resource_schemas/data_source_schemas key) for a
+  # platform/CF-space-scoping mechanism - none exists; `platform_id` on
+  # this resource is computed-only, not settable. CF-space-scoped
+  # resources are the separate `cloudfoundry/cloudfoundry` provider's
+  # domain, not `SAP/btp`'s - not adding a second provider for one
+  # resource. The database is instead created directly via
+  # `cf create-service` in cf-deploy.yml's procurement-core job (real
+  # CF-space scope, matches how a plain `cf create-service` instance
+  # showed up correctly scoped in the same cockpit view). Module kept
+  # whole, not deleted, same convention as modules/kyma-env - it's
+  # correct Terraform for a subaccount-level HANA Cloud instance, just
+  # not the shape this specific broker needs.
+  count = 0
+
   source        = "./modules/hana-cloud"
   subaccount_id = module.subaccount.id
   name_prefix   = "procureiq-${var.environment}"
