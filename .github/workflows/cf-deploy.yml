@@ -120,6 +120,38 @@ jobs:
           curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
           sudo mv cf8 /usr/local/bin/cf
           cf install-plugin -f multiapps
+      - name: Ensure the shared HANA Cloud database exists (CF-space-scoped)
+        # Real capability boundary hit live: the "hana"/"hdi-shared" broker
+        # needs a database visible to THIS CF space specifically, and
+        # Terraform's SAP/btp provider can only create Service-Manager/
+        # subaccount-scoped instances (no CF-space/platform concept
+        # anywhere in its real schema - checked exhaustively before
+        # concluding this, see infra/terraform/main.tf's module.hana_cloud
+        # comment). cf create-service, run directly against this space,
+        # is what actually produces a broker-visible instance - confirmed
+        # via the BTP cockpit's own Space > Service Instances view. Params
+        # are the plan's real published create schema (`cf curl
+        # /v3/service_plans/<hana-free guid>` -> .schemas.service_instance.
+        # create.parameters, queried live): data.edition and data.memory
+        # are required (memory fixed at 16 for hana-free), and the broker
+        # separately requires generateSystemPassword at runtime (not
+        # captured in the published schema's own `required` list).
+        # Idempotent - skips creation if a later deploy finds it already
+        # exists, rather than erroring on "already exists".
+        env:
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+        run: |
+          cf api https://api.cf.us10-001.hana.ondemand.com
+          cf auth "$CF_USERNAME" "$CF_PASSWORD"
+          cf target -o 4cbf0c12trial -s ${{ inputs.environment }}
+          if cf service procureiq-${{ inputs.environment }}-hana-cloud >/dev/null 2>&1; then
+            echo "procureiq-${{ inputs.environment }}-hana-cloud already exists, skipping creation"
+          else
+            cf create-service hana-cloud hana-free procureiq-${{ inputs.environment }}-hana-cloud \
+              -c '{"data":{"memory":16,"edition":"cloud","generateSystemPassword":true}}' \
+              --wait
+          fi
       - name: cf login and deploy
         env:
           CF_USERNAME: ${{ secrets.CF_USERNAME }}
