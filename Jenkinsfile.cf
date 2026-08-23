@@ -32,9 +32,12 @@
 
 @Library('piper-lib-os') _
 
+// org is this trial's real, SAP-assigned CF org name (confirmed via
+// `cf orgs`), not 'procureiq-dev' - see .github/workflows/cf-deploy.yml's
+// identical comment for why. Update this literal if the org ever changes.
 def cfTarget = [
     apiEndpoint  : 'https://api.cf.us10.hana.ondemand.com',
-    org          : 'procureiq-dev',
+    org          : '4cbf0c12trial',
     space        : 'dev',
     credentialsId: 'procureiq-cf-credentials',
 ]

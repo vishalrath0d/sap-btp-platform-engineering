@@ -46,6 +46,13 @@ name: cf deploy (all Cloud Foundry services)
 # standalone via `workflow_dispatch` instead (bypassing `deploy.yml`)
 # would need real `CF_USERNAME`/`CF_PASSWORD` repo secrets to exist too -
 # not yet created, since `deploy.yml` is the path actually used so far.
+#
+# `-o 4cbf0c12trial` below is this trial's real, SAP-assigned CF org
+# name (confirmed via `cf orgs`) - not a name this project chose.
+# Terraform's modules/cloudfoundry-env adopts this pre-existing org
+# rather than creating a second one (trial accounts don't allow that),
+# so a "procureiq-<env>" name was never real here. Update this literal
+# if the org ever changes (a different trial, moving to a paid account).
 
 on:
   workflow_dispatch:
@@ -120,7 +127,7 @@ jobs:
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
-          cf target -o procureiq-${{ inputs.environment }} -s ${{ inputs.environment }}
+          cf target -o 4cbf0c12trial -s ${{ inputs.environment }}
           cf deploy mta_archives/*.mtar -e mtaext-${{ inputs.environment }}.mtaext --no-confirm
 
   ai-copilot:
@@ -144,7 +151,7 @@ jobs:
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
-          cf target -o procureiq-${{ inputs.environment }} -s ${{ inputs.environment }}
+          cf target -o 4cbf0c12trial -s ${{ inputs.environment }}
           cf push -f manifest.yml
 
   legacy-erp-gateway:
@@ -168,7 +175,7 @@ jobs:
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
-          cf target -o procureiq-${{ inputs.environment }} -s ${{ inputs.environment }}
+          cf target -o 4cbf0c12trial -s ${{ inputs.environment }}
           cf push -f manifest.yml
 
   spend-anomaly-detector:
@@ -197,7 +204,7 @@ jobs:
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
-          cf target -o procureiq-${{ inputs.environment }} -s ${{ inputs.environment }}
+          cf target -o 4cbf0c12trial -s ${{ inputs.environment }}
           cf push -f manifest.yml
 
   api-gateway:
@@ -222,7 +229,7 @@ jobs:
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
-          cf target -o procureiq-${{ inputs.environment }} -s ${{ inputs.environment }}
+          cf target -o 4cbf0c12trial -s ${{ inputs.environment }}
           cf push -f manifest.yml
           CORE_GUID=$(cf app procurement-core-srv --guid)
           CORE_URL=$(cf curl "/v3/apps/${CORE_GUID}/routes" | jq -r '.resources[0].url')
@@ -253,7 +260,7 @@ jobs:
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
-          cf target -o procureiq-${{ inputs.environment }} -s ${{ inputs.environment }}
+          cf target -o 4cbf0c12trial -s ${{ inputs.environment }}
 
           ANOMALY_GUID=$(cf app spend-anomaly-detector --guid)
           ANOMALY_URL=$(cf curl "/v3/apps/${ANOMALY_GUID}/routes" | jq -r '.resources[0].url')

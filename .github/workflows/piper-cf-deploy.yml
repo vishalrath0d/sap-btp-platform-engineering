@@ -42,6 +42,10 @@ name: piper cf deploy (GitHub Actions, real Piper binary)
 # is what supplies the real value, since a Cloud Foundry org on BTP
 # authenticates with the same SAP Universal ID as the cockpit login - no
 # separate CF-specific secret is actually stored in this repo.
+#
+# `--org 4cbf0c12trial` below is this trial's real, SAP-assigned CF org
+# name (confirmed via `cf orgs`) - see cf-deploy.yml's own comment for
+# why. Update this literal if the org ever changes.
 
 on:
   workflow_call:
@@ -115,5 +119,5 @@ jobs:
             --mtaDeployParameters "-f --version-rule ALL" \
             --mtaExtensionDescriptor mtaext-${{ inputs.environment }}.mtaext \
             --apiEndpoint https://api.cf.us10.hana.ondemand.com \
-            --org procureiq-${{ inputs.environment }} \
+            --org 4cbf0c12trial \
             --space ${{ inputs.environment }}
