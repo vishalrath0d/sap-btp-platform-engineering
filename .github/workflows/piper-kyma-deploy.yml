@@ -1,0 +1,108 @@
+name: piper kyma deploy (GitHub Actions, real Piper binary)
+
+# The Kyma-side counterpart to piper-cf-deploy.yml - was a real gap
+# without this: Jenkinsfile.kyma already uses a real Piper step
+# (kanikoExecute) for its image build, so the Jenkins track already had a
+# genuine Piper-Kyma path; the GitHub Actions track didn't, until now.
+# Mirrors Jenkinsfile.kyma's own split exactly: `piper kanikoExecute` (the
+# real Piper CLI subcommand, same Go step Jenkins's kanikoExecute calls
+# into) builds and pushes the image - a daemonless, containerized build,
+# the standard choice when the runner doesn't have Docker-in-Docker
+# available, which is exactly the constraint kaniko exists for. The BTP
+# Operator + APIRule apply sequence stays plain kubectl/envsubst, same
+# reasoning kyma-deploy.yml and Jenkinsfile.kyma both already document:
+# no single Piper step expresses "provision, wait for the binding, read a
+# real value out of its Secret, template it into another manifest, apply
+# that."
+#
+# CLI flag names (kanikoExecute's containerImageName/containerImageTag/
+# dockerConfigJSON) are sourced from Jenkins's own kanikoExecute call in
+# Jenkinsfile.kyma and project-piper.io's docs, not yet live-verified -
+# same honesty level as piper-cf-deploy.yml.
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+    secrets:
+      KYMA_KUBECONFIG:
+        required: true
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Which environment to deploy"
+        required: true
+        type: choice
+        options: [dev, qa, prod]
+      confirm:
+        description: 'Type "deploy" to confirm you intend to run this against the real BTP account'
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  verify-confirmation:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify confirmation input
+        if: inputs.confirm != 'deploy'
+        run: |
+          echo "::error::Confirmation input must be exactly 'deploy' - got '${{ inputs.confirm }}'"
+          exit 1
+
+  piper-deploy:
+    needs: [verify-confirmation]
+    if: always() && needs.verify-confirmation.result != 'failure'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    defaults:
+      run:
+        working-directory: services/spend-anomaly-detector
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the real Piper CLI binary
+        run: |
+          wget -q https://github.com/SAP/jenkins-library/releases/latest/download/piper
+          chmod +x piper
+          sudo mv piper /usr/local/bin/piper
+          piper version
+
+      - name: Build a dockerConfigJSON for ghcr.io (kaniko doesn't use `docker login`)
+        run: |
+          AUTH=$(echo -n "${{ github.actor }}:${{ secrets.GITHUB_TOKEN }}" | base64 -w0)
+          echo "{\"auths\":{\"ghcr.io\":{\"auth\":\"${AUTH}\"}}}" > /tmp/docker-config.json
+
+      - name: piper kanikoExecute
+        run: |
+          piper kanikoExecute \
+            --containerImageName spend-anomaly-detector \
+            --containerRegistryUrl https://ghcr.io/${{ github.repository }} \
+            --containerImageTag ${{ github.sha }} \
+            --dockerConfigJSON /tmp/docker-config.json
+
+      - uses: azure/setup-kubectl@v4 # a generic kubectl installer, nothing Azure-specific - works against any cluster, Kyma included
+
+      - name: Configure kubeconfig
+        env:
+          KYMA_KUBECONFIG: ${{ secrets.KYMA_KUBECONFIG }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "$KYMA_KUBECONFIG" | base64 -d > "$HOME/.kube/config"
+
+      - name: Deploy to Kyma
+        run: |
+          kubectl get namespace procureiq || kubectl create namespace procureiq
+          kubectl apply -f k8s/service-instance.yaml
+          kubectl apply -f k8s/service-binding.yaml
+          kubectl wait --for=condition=Ready servicebinding/spend-anomaly-detector-xsuaa-binding -n procureiq --timeout=120s
+          sed "s#spend-anomaly-detector:latest#spend-anomaly-detector:${{ github.sha }}#" k8s/deployment.yaml | kubectl apply -f -
+          XSUAA_ISSUER=$(kubectl get secret spend-anomaly-detector-xsuaa-binding -n procureiq -o jsonpath='{.data.url}' | base64 -d)
+          XSUAA_JWKS_URI="${XSUAA_ISSUER}/token_keys"
+          export XSUAA_ISSUER XSUAA_JWKS_URI
+          envsubst < k8s/apirule.yaml | kubectl apply -f -

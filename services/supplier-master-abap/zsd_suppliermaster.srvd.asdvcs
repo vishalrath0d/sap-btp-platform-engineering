@@ -1,0 +1,11 @@
+@EndUserText.label: 'Supplier Master - Service Definition'
+
+// Exposes ZC_SupplierMaster over OData V4, once bound to a real Service
+// Binding (created via ADT, not a text-file artifact - same class of
+// "GUI tool, not hand-typed source" step this folder's README already
+// calls out for the underlying table). The RAP-side equivalent of
+// procurement-core/srv/service.cds's `service ProcurementService @(path:
+// '/procurement')` declaration.
+define service ZSD_SupplierMaster {
+  expose ZC_SupplierMaster as SupplierMaster;
+}

@@ -1,0 +1,17 @@
+_schema-version: "3.3"
+ID: procurement-core-prod
+extends: procurement-core
+description: "Prod-environment overrides - see mtaext-dev.mtaext's comment for why this ID must be unique from the base MTA's own ID and from every other environment's own extension ID. NOT USABLE YET - same reason infra/terraform/environments/prod/terraform.tfvars is a stub: the trial provides one real subaccount, not a separate prod one."
+
+resources:
+  - name: procurement-core-db
+    parameters:
+      service-plan: hdi-shared
+
+modules:
+  - name: procurement-core-srv
+    properties:
+      LOG_LEVEL: warning
+    parameters:
+      memory: 512M
+      disk-quota: 1024M

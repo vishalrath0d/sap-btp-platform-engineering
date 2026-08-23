@@ -1,0 +1,112 @@
+name: deploy
+
+# Renamed from deploy-all.yml - "all" implied it always deploys
+# everything, which is no longer true now that `target` lets you scope a
+# run to just the CF track, just Kyma, or either one's real-Piper-CLI
+# alternate mechanism instead.
+#
+# terraform apply is deliberately NOT a step in this file - see
+# infra/terraform's own terraform-apply.yml instead, and the mapping
+# below for why these are two separate lifecycles, not one:
+#
+#   terraform-apply.yml   - INFRASTRUCTURE: subaccount, entitlements, the
+#                            CF org/space and Kyma cluster themselves
+#                            existing, XSUAA, role collections. Changes
+#                            rarely - only when the landscape itself
+#                            changes (a new entitlement, a new
+#                            environment, a new XSUAA scope). Run
+#                            manually, standalone, whenever infra changes.
+#                                |
+#                                | (a precondition - deploy assumes
+#                                |  infra already exists; it does not
+#                                |  create it)
+#                                v
+#   deploy.yml (this file) - APPLICATION CODE: push the five services'
+#                            actual code into infra that terraform-apply.yml
+#                            already ensured exists. Changes constantly -
+#                            every commit that's ready to ship. Run
+#                            manually, standalone, whenever app code is
+#                            ready to deploy - NOT automatically chained
+#                            after every terraform apply, and NOT running
+#                            terraform apply itself first, since re-running
+#                            terraform on every single app deploy would be
+#                            wasteful and risks touching infrastructure
+#                            state for a change that's only about code.
+#
+# Real consequence of this: the first time this repo ever deploys to a
+# given environment, terraform-apply.yml must be run (and its plan
+# reviewed) BEFORE this workflow is used at all - deploy.yml will fail
+# fast (cf/kubectl target a space/cluster that doesn't exist yet) if run
+# out of order, which is the correct failure mode for a missing
+# precondition, not something this workflow should paper over by quietly
+# running terraform itself.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Which environment to deploy"
+        required: true
+        type: choice
+        options: [dev, qa, prod]
+      target:
+        description: "Which deployment mechanism to run"
+        required: true
+        type: choice
+        options:
+          - all # cf-deploy.yml + kyma-deploy.yml (the two primary, plain-CLI paths)
+          - cf # cf-deploy.yml only
+          - kyma # kyma-deploy.yml only
+          - piper-cf # piper-cf-deploy.yml - the real Piper-CLI path for the CF track, an alternate mechanism to `cf`, not run alongside it
+          - piper-kyma # piper-kyma-deploy.yml - the real Piper-CLI path for the Kyma track, an alternate mechanism to `kyma`, not run alongside it
+      confirm:
+        description: 'Type "deploy" to confirm you intend to run this against the real BTP account'
+        required: true
+
+jobs:
+  verify-confirmation:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify confirmation input
+        if: inputs.confirm != 'deploy'
+        run: |
+          echo "::error::Confirmation input must be exactly 'deploy' - got '${{ inputs.confirm }}'"
+          exit 1
+
+  cf-deploy:
+    needs: verify-confirmation
+    if: inputs.target == 'all' || inputs.target == 'cf'
+    uses: ./.github/workflows/cf-deploy.yml
+    with:
+      environment: ${{ inputs.environment }}
+    secrets:
+      CF_USERNAME: ${{ secrets.CF_USERNAME }}
+      CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+
+  kyma-deploy:
+    needs: verify-confirmation
+    if: inputs.target == 'all' || inputs.target == 'kyma'
+    uses: ./.github/workflows/kyma-deploy.yml
+    with:
+      environment: ${{ inputs.environment }}
+    secrets:
+      KYMA_KUBECONFIG: ${{ secrets.KYMA_KUBECONFIG }}
+
+  piper-cf-deploy:
+    needs: verify-confirmation
+    if: inputs.target == 'piper-cf'
+    uses: ./.github/workflows/piper-cf-deploy.yml
+    with:
+      environment: ${{ inputs.environment }}
+    secrets:
+      CF_USERNAME: ${{ secrets.CF_USERNAME }}
+      CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+
+  piper-kyma-deploy:
+    needs: verify-confirmation
+    if: inputs.target == 'piper-kyma'
+    uses: ./.github/workflows/piper-kyma-deploy.yml
+    with:
+      environment: ${{ inputs.environment }}
+    secrets:
+      KYMA_KUBECONFIG: ${{ secrets.KYMA_KUBECONFIG }}

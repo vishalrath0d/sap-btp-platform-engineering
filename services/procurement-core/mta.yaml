@@ -10,12 +10,22 @@ parameters:
 # model and produces gen/srv + gen/db BEFORE mbt validates module paths -
 # those directories don't exist until this hook runs, so modules below
 # point at gen/srv and gen/db, not the source tree directly.
+#
+# `npx -p @sap/cds-dk cds build`, not bare `npx cds build` - real failure
+# hit live in this branch's CI, inside `mbt build` itself (this before-all
+# hook is what mbt actually runs - a separate CI step running bare `npx
+# cds build` earlier in the same job does NOT fix this call, since mbt
+# re-invokes it independently): `npm error could not determine executable
+# to run`. @sap/cds is a real dependency here but doesn't ship the `cds`
+# CLI - that's the separate @sap/cds-dk package, not installed by `npm
+# install --include=dev` either (it's in neither dependencies nor
+# devDependencies). Pinning it explicitly with `-p` is the fix.
 build-parameters:
   before-all:
     - builder: custom
       commands:
         - npm install --include=dev
-        - npx cds build --production
+        - npx -p @sap/cds-dk cds build --production
 
 modules:
   - name: procurement-core-srv

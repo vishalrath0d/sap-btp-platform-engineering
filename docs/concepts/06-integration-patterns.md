@@ -19,7 +19,7 @@ ad hoc.
 |---|---|---|
 | **Event-driven, async** | Event Mesh (topic pub/sub) | `spend-anomaly-detector` — `procurement-core` publishes `PurchaseOrderCreated`, `spend-anomaly-detector` reacts. Currently an HTTP webhook locally (see that service's README for exactly why and what changes for real Event Mesh) |
 | **Point-to-point, sync, on-prem-adjacent** | Destination service + Cloud Connector | `syncLegacySuppliers` — see `11-connectivity-cloud-connector.md` |
-| **iPaaS flow (orchestration, mapping, protocol translation)** | Integration Suite / Cloud Integration (CPI), iFlows | `services/integration-flow` — genuinely account-gated, Cloud Integration's iFlow designer is a cloud-only tool with no local authoring/testing story at all, unlike the other two shapes above which could be meaningfully simulated locally |
+| **iPaaS flow (orchestration, mapping, protocol translation)** | Integration Suite / Cloud Integration (CPI), iFlows | `services/integration-flow` — real BPMN2 `.iflw` + Groovy mapping script written, not yet importable-verified: Cloud Integration's iFlow designer is a cloud-only tool with no local authoring/testing story at all, unlike the other two shapes above which could be meaningfully simulated locally |
 
 ## Integration Suite / Cloud Integration (CPI), briefly
 

@@ -1,12 +1,88 @@
 # Continuity notes — read this at the start of every session
 
-Last updated: 2026-08-22 (end of session 5 — backlog completion + Terraform conventions fix)
+Last updated: 2026-08-23 (end of session 9 — CI/CD restructuring per
+direct feedback: one test.yml with real change-detection, terraform
+decoupled from deploy, a real GitHub Actions Piper track, real monitoring,
+ABAP RAP/Integration Suite iFlow/TMS backlog filled — see below)
+
+### Session 9 — CI/CD restructuring (direct feedback, not a redesign from scratch)
+
+- **`test.yml` replaces 5 per-service `*-ci.yml` files.** Same real
+  change-detection property (a change to one service doesn't re-run every
+  other service's tests), one file instead of five - `dorny/paths-filter@v3`
+  (a real, standard action) drives a `changes` job, every service's own
+  job runs conditionally on its output. Jenkins mirrors this with its own
+  real built-in `when { changeset "..." }` directive on `Jenkinsfile.cf`/
+  `Jenkinsfile.kyma`'s Test stages - no third-party action needed there.
+- **`deploy-all.yml` renamed to `deploy.yml`, `terraform apply` removed
+  from it entirely.** Infra provisioning (`infra/terraform/
+  terraform-apply.yml`) and app deployment are two different lifecycles -
+  infra changes rarely and is applied standalone/manually; app code
+  changes on every ship-ready commit. `deploy.yml` now takes a `target`
+  input (`all`/`cf`/`kyma`/`piper-cf`) and routes to the right reusable
+  workflow instead of always running everything - see that file's own
+  header comment for the full terraform-vs-deploy dependency mapping.
+- **A real GitHub Actions Piper track added**: `piper-cf-deploy.yml`
+  installs the actual Piper Go binary (confirmed real, published on
+  `SAP/jenkins-library`'s GitHub releases) and calls `piper mtaBuild`/
+  `piper cloudFoundryDeploy` directly - Piper genuinely runs on both
+  Jenkins and GitHub Actions, only `project-piper-action` (the old GitHub
+  Actions *wrapper*) is deprecated, not Piper itself. Not yet live-verified
+  (flagged honestly in `ci-cd/piper/README.md`).
+- Real Prometheus + Grafana across all 5 services (see session 8 below),
+  and the full ABAP RAP / Integration Suite iFlow / Cloud Transport
+  Management backlog filled as real source (see `PROJECT_CHARTER.md`'s
+  "Scope expansion (session 8)" section) - both already covered in detail
+  there, not re-summarized here.
 
 ## Where things stand
 
-**5 services, 67/67 tests passing, 51 staged commits, all 15 concept docs
-written, full operations layer written, Terraform restructured to real
-module/environment conventions with CI-driven apply.**
+**5 services, 67/67 tests passing, all 15 concept docs written, full
+operations layer written, Terraform restructured to real module/
+environment conventions with CI-driven apply and a real verified live
+plan run (`9 to add, 0 to change, 0 to destroy`). Every service now runs
+locally as a real Docker Compose stack, cross-integrated over an actual
+network (not just in-process tests), and every service now has real CI/CD
+— the 4 Cloud Foundry-bound services via `cf push`/MTA, the one Kyma-bound
+service (`spend-anomaly-detector`) via real BTP Operator + APIRule v2
+manifests, plus a `deploy-all.yml` orchestrator sequencing the whole
+landscape in dependency order. Nothing deploys automatically anywhere —
+every deploy job stays gated (`if: false` + a GitHub Environment, or a
+typed confirmation input) pending explicit review, per this project's
+account strategy.**
+
+### Session 7 additions (this session)
+- `docker-compose.yml` + a `Dockerfile`/`.dockerignore` per service. Real
+  bugs found and fixed verifying it live (not guessed): `better-sqlite3`
+  needs build tools `node:20-alpine` lacks; `cds-serve` doesn't
+  auto-migrate the way `cds watch` does; `npx cds` doesn't exist without
+  `@sap/cds-dk`; `destination.js` hardcoded `localhost`, doesn't resolve
+  between containers. Verified end to end live: `api-gateway ->
+  procurement-core -> {legacy-erp-gateway, spend-anomaly-detector}`, full
+  chain, real data.
+- CI/CD for the 4 services that didn't have it yet (`procurement-core`
+  already did): `ai-copilot`/`api-gateway`/`legacy-erp-gateway` get plain
+  `cf push` manifests; `spend-anomaly-detector` gets a real Kyma
+  deployment (BTP Operator `ServiceInstance`/`ServiceBinding` for XSUAA,
+  an `APIRule` in the current v2 syntax — verified against Kyma's actual
+  docs, not the deprecated v1beta1 shape).
+- `deploy-all.yml` — one `workflow_dispatch` orchestrating `terraform
+  apply` → CF services → the Kyma service in real dependency order.
+- README rewritten to match `ai-ml-llm-ops`'s structure: real Mermaid
+  architecture + sequence diagrams, a testing/navigation guide, verified
+  port map.
+- **Resume-claim gap-check** (see `PROJECT_CHARTER.md`'s new "Scope
+  expansion (session 7)" section): checked this project against
+  Vishal's own SAP-track resume's specific claims. Confirmed via research
+  that ABAP Environment and Integration Suite are both trial-provisionable
+  on this same subaccount (not a separate specialized trial) — added both
+  as candidate entitlements to `infra/terraform`'s `entitlements` module,
+  flagged for confirmation against the next live plan. `services/
+  supplier-master-abap` and `services/integration-flow` remain genuinely
+  gated on GUI-only SAP tooling (Business Application Studio/ADT for RAP,
+  Integration Suite's web designer for iFlows) — the concrete
+  provisioning-then-authoring sequence is written down there, not just
+  "still blocked."
 
 ### Services
 1. `procurement-core` (17/17) — CAP core workflow + Fiori UI + connectivity sync + Workflow Management design note
@@ -94,11 +170,17 @@ from `/Users/vishal/Documents/sms-magic/smsmagic-projects/devops/`.
 
 ## What's left in the backlog (genuinely small now)
 
-- `services/integration-flow` (Integration Suite iFlow) — still correctly
-  account-gated, no local authoring tool exists for CPI iFlows at all.
-- `services/supplier-master-abap` (ABAP Cloud/RAP + gCTS) — still
-  account-gated, no local ABAP Cloud runtime exists.
-- `transport/cloud-transport-management` — still account-gated.
+- `services/integration-flow` (Integration Suite iFlow), `services/
+  supplier-master-abap` (ABAP Cloud/RAP + gCTS), `transport/cloud-
+  transport-management` — reclassified this session from "account-gated"
+  to "next in the provisioning queue, then genuinely GUI-tool-gated": all
+  three are provisionable on this same trial subaccount (confirmed via
+  research, see `PROJECT_CHARTER.md`'s session 7 section), but authoring
+  the RAP business object and the iFlow both require SAP's own GUI tooling
+  (Business Application Studio/ADT, Integration Suite's web designer) that
+  can't be driven headlessly - the concrete step order is written in that
+  charter section, starting with the two new candidate entitlements
+  already added to `infra/terraform/main.tf`.
 - MTX/multitenancy — documented not built, deliberately (see
   `docs/concepts/12-multitenancy-and-saas.md` for why half-building it
   would misrepresent verification not actually done).
@@ -108,6 +190,25 @@ from `/Users/vishal/Documents/sms-magic/smsmagic-projects/devops/`.
 
 Everything else identified in prior sessions' research has been addressed
 (documented, built, or explicitly and reasoned-ly deferred).
+
+## Idea parked for the end, if there's time (not a commitment)
+
+**Making the CF-bound services deployable to Kyma too (and vice versa) -
+genuine runtime swappability, not just the fixed CF-vs-Kyma split each
+service has today.** Explicitly *not* doing this now: today's split is
+architectural (see the session 9/10 discussion in conversation history -
+`spend-anomaly-detector` is event-driven, the other four are synchronous
+request/response, which is *why* each sits where it does, not an
+arbitrary assignment) and covers both CF and Kyma for real, which was the
+actual goal. Making every service swappable between runtimes would mean
+building a second deployable shape for each one (buildpack manifests for
+`spend-anomaly-detector`, or container images + K8s manifests for the
+other four) - real, doable, but a genuinely separate chunk of work with
+its own tradeoffs to design (e.g. a synchronous CAP app on Kyma needs its
+own Helm chart via `cds add kyma`, not just a Dockerfile), not something
+to half-do. Revisit only if there's spare time at the very end - keeping
+the current one-natural-runtime-per-service split is the better default
+otherwise, not a stopgap.
 
 ## Next steps, in order
 

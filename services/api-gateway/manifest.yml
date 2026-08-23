@@ -1,0 +1,18 @@
+# Plain `cf push` manifest - see ai-copilot/manifest.yml's comment for why
+# this isn't an MTA.
+---
+applications:
+  - name: api-gateway
+    memory: 256M
+    disk_quota: 512M
+    buildpacks:
+      - nodejs_buildpack
+    command: npm start
+    env:
+      NODE_ENV: production
+      # PROCUREMENT_CORE_URL: set as a real CF env var per environment
+      # (dev/qa/prod), not committed here - it's the deployed
+      # procurement-core-srv route, which CF only assigns at push time
+      # (see terraform-apply.yml's follow-up deploy steps once MTA deploy
+      # exists for that service, and this workflow's own deploy job below
+      # for how it's threaded through).

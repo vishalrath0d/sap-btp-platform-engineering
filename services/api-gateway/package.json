@@ -4,13 +4,16 @@
   "description": "API Management simulation in front of procurement-core - API key issuance, rate limiting, and an API Business Hub-style catalog entry. See README for what's simulated vs the real BTP API Management service.",
   "private": true,
   "type": "commonjs",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node src/server.js",
     "test": "jest --runInBand"
   },
   "dependencies": {
-    "express": "^4"
+    "express": "^4",
+    "prom-client": "^15"
   },
   "devDependencies": {
     "jest": "^29",

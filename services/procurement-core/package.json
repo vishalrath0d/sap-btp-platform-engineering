@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "CAP (Node.js) procurement service for ProcureIQ — Purchase Requisition to Purchase Order lifecycle, built for SAP BTP (Cloud Foundry / Kyma).",
   "private": true,
+  "main": "server.js",
   "engines": {
     "node": ">=20"
   },
@@ -17,7 +18,8 @@
     "@cap-js/sqlite": "^2",
     "@cap-js/hana": "^2",
     "@sap/xssec": "^4",
-    "express": "^4"
+    "express": "^4",
+    "prom-client": "^15"
   },
   "devDependencies": {
     "jest": "^29",

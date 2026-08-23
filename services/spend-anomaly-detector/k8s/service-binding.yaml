@@ -1,0 +1,20 @@
+# Binds the ServiceInstance above, producing a Kubernetes Secret
+# (spend-anomaly-detector-xsuaa-binding) with the real XSUAA credentials -
+# not consumed by this service's own code (see service-instance.yaml's
+# comment on gateway-level auth via APIRule), but this is still the
+# correct, complete BTP Operator pattern: an instance without a binding is
+# provisioned but nothing can actually reference its credentials, and
+# APIRule's jwt rule itself resolves the issuer from XSUAA's own
+# well-known JWKS endpoint (see apirule.yaml), not from this secret
+# directly - the binding exists so any future consumer (this service
+# reading its own scopes, or a debugging session) has a real credentials
+# object to bind to, same as procurement-core's XSUAA binding does on CF.
+apiVersion: services.cloud.sap.com/v1
+kind: ServiceBinding
+metadata:
+  name: spend-anomaly-detector-xsuaa-binding
+  namespace: procureiq
+spec:
+  serviceInstanceName: spend-anomaly-detector-xsuaa
+  externalName: spend-anomaly-detector-xsuaa-binding
+  secretName: spend-anomaly-detector-xsuaa-binding

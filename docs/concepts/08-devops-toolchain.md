@@ -63,5 +63,8 @@ real gate).
 ## Known limitations (honesty notes)
 
 Piper/MTA Build Tool are verified by actually running them; CTMS and
-gCTS/abapGit are documented, not run — both are genuinely account-gated,
-see `docs/next/next.md`.
+gCTS/abapGit are written (`transport/cloud-transport-management`'s real
+node/route config, `services/supplier-master-abap`'s real RAP source) but
+not run — both are genuinely account-gated for the *provisioning/apply*
+step, see `docs/next/next.md` and `PROJECT_CHARTER.md`'s "Scope expansion
+(session 7/8)" sections.

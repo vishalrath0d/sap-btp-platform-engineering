@@ -5,6 +5,7 @@ const config = require('./config');
 const apiKeys = require('./api-keys');
 const rateLimiter = require('./rate-limiter');
 const catalog = require('./catalog');
+const metrics = require('./metrics');
 
 function requireApiKey(req, res, next) {
   const key = req.header('X-API-Key');
@@ -16,6 +17,7 @@ function requireApiKey(req, res, next) {
   res.set('X-RateLimit-Remaining', String(remaining));
   res.set('X-RateLimit-Reset', String(resetAt));
   if (!allowed) {
+    metrics.rateLimitExceededTotal.inc();
     return res.status(429).json({ error: 'rate limit exceeded', resetAt });
   }
 
@@ -25,10 +27,18 @@ function requireApiKey(req, res, next) {
 
 function createApp() {
   const app = express();
+  app.use(metrics.httpMiddleware);
   app.use(express.json());
 
   app.get('/health', (req, res) => res.json({ status: 'ok' }));
   app.get('/catalog', (req, res) => res.json(catalog));
+
+  // Not auth-gated, matching how a real Prometheus scrape target works -
+  // the scraper itself isn't an API consumer holding an X-API-Key.
+  app.get('/metrics', (req, res) => {
+    metrics.activeApiKeys.set(apiKeys.list().filter((k) => k.active).length);
+    metrics.handler(req, res);
+  });
 
   // Consumer onboarding - simulates registering an application against an
   // API product in API Business Hub / API Management. No auth of its own

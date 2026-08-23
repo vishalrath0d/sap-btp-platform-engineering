@@ -1,0 +1,46 @@
+managed implementation in class ZBP_I_SUPPLIERMASTER unique;
+strict(2);
+
+// Managed scenario - RAP's framework handles CRUD persistence directly
+// against zprocureiq_supp (see this folder's README); the only custom
+// logic needed is validation, in ZBP_I_SUPPLIERMASTER.clas.abap. Same
+// "framework does the plumbing, custom code does the business rules"
+// split CAP's own generic CRUD handlers + srv/service.js's custom .on()
+// handlers follow on the Node side of this project.
+define behavior for ZI_SupplierMaster alias SupplierMaster
+persistent table zprocureiq_supp
+lock master
+authorization master ( instance )
+etag master LocalLastChangedAt
+{
+  create;
+  update;
+  delete;
+
+  field ( readonly )   SupplierUUID, LocalCreatedAt, LocalCreatedBy, LocalLastChangedAt, LocalLastChangedBy;
+  field ( mandatory )  ExternalID, SourceSystem, CompanyName, RiskRating, LifecycleStatus;
+
+  // Same enum checks legacy-supplier-mapper.js's mapLegacySupplier()
+  // already enforces on the CAP side (RISK_MAP/STATUS_MAP throwing on an
+  // unrecognized code) - here as RAP validations instead of a thrown JS
+  // Error, same rule, the idiomatic mechanism for each framework.
+  validation validateRiskRating on save { create; update; field RiskRating; }
+  validation validateLifecycleStatus on save { create; update; field LifecycleStatus; }
+
+  mapping for zprocureiq_supp
+  {
+    SupplierUUID           = supplier_uuid;
+    ExternalID              = external_id;
+    SourceSystem             = source_system;
+    CompanyName              = company_name;
+    Country                  = country;
+    TaxNumber                = tax_number;
+    Email                    = email;
+    RiskRating               = risk_rating;
+    LifecycleStatus          = lifecycle_status;
+    LocalCreatedAt           = local_created_at;
+    LocalCreatedBy           = local_created_by;
+    LocalLastChangedAt       = local_last_changed_at;
+    LocalLastChangedBy       = local_last_changed_by;
+  }
+}

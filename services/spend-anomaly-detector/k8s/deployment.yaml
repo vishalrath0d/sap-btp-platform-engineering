@@ -1,0 +1,62 @@
+# Standard Kubernetes Deployment + Service - Kyma IS a real K8s cluster,
+# nothing SAP-specific about this file itself (that's APIRule's and the
+# BTP Operator resources' job). Image reference points at GitHub Container
+# Registry - see .github/workflows/spend-anomaly-detector-ci.yml for the
+# build+push step; :latest is replaced with the actual commit SHA at
+# deploy time by that workflow, never left floating in what's applied.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spend-anomaly-detector
+  namespace: procureiq
+  labels:
+    app: spend-anomaly-detector
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spend-anomaly-detector
+  template:
+    metadata:
+      labels:
+        app: spend-anomaly-detector
+    spec:
+      containers:
+        - name: spend-anomaly-detector
+          image: ghcr.io/vishalrath0d/sap-btp-platform-engineering/spend-anomaly-detector:latest
+          ports:
+            - containerPort: 4006
+          env:
+            - name: PORT
+              value: "4006"
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 4006
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4006
+            initialDelaySeconds: 10
+            periodSeconds: 20
+          resources:
+            requests:
+              cpu: 50m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: spend-anomaly-detector
+  namespace: procureiq
+spec:
+  selector:
+    app: spend-anomaly-detector
+  ports:
+    - port: 4006
+      targetPort: 4006

@@ -1,0 +1,81 @@
+// Project "Piper" pipeline for the Kyma-bound side of the landscape -
+// currently one service (spend-anomaly-detector), kept as its own
+// pipeline file rather than folded into Jenkinsfile.cf because the two
+// tracks build genuinely different artifacts (buildpack app vs. container
+// image) through genuinely different tooling (cf CLI vs. kubectl + BTP
+// Operator) - see .github/workflows/kyma-deploy.yml's identical reasoning,
+// this is that same split expressed in Piper instead of GitHub Actions.
+//
+// Image build+push uses Piper's kanikoExecute (its real containerized,
+// daemonless build step - the standard choice inside a Jenkins agent that
+// may not have Docker-in-Docker available, which is exactly the kind of
+// constraint a real self-hosted Jenkins for this project would have).
+// The BTP Operator + APIRule apply sequence is plain `sh` steps, not a
+// single high-level Piper step - Piper has no step that expresses
+// "provision a ServiceInstance, wait for its binding, extract a real
+// value from the resulting Secret, template it into another manifest,
+// then apply that" as one call; the same reasoning
+// .github/workflows/kyma-deploy.yml already documents for using raw
+// kubectl/envsubst there instead of forcing a generic action to fit.
+
+@Library('piper-lib-os') _
+
+pipeline {
+    agent any
+    environment {
+        IMAGE = "ghcr.io/vishalrath0d/sap-btp-platform-engineering/spend-anomaly-detector:${env.GIT_COMMIT}"
+    }
+    stages {
+
+        // `when { changeset "..." }` - same real, built-in Jenkins
+        // Declarative Pipeline mechanism Jenkinsfile.cf's Test stages use,
+        // here at the whole-stage level since this pipeline only ever
+        // covers the one service.
+        stage('Test') {
+            when { changeset "services/spend-anomaly-detector/**" }
+            steps {
+                dir('services/spend-anomaly-detector') {
+                    sh 'npm ci && npm test'
+                }
+            }
+        }
+
+        stage('Build + push image') {
+            when { changeset "services/spend-anomaly-detector/**" }
+            steps {
+                dir('services/spend-anomaly-detector') {
+                    kanikoExecute script: this,
+                        containerImageName: 'spend-anomaly-detector',
+                        containerImageTag: env.GIT_COMMIT,
+                        dockerConfigJsonCredentialsId: 'procureiq-ghcr-credentials'
+                }
+            }
+        }
+
+        // Not wired to run automatically - `when { expression { false } }`
+        // matches Jenkinsfile.cf's and every GitHub Actions workflow's
+        // `if: false`, same build-first, deploy-after-review posture.
+        stage('Deploy to Kyma') {
+            when { expression { false } }
+            steps {
+                dir('services/spend-anomaly-detector') {
+                    withCredentials([file(credentialsId: 'procureiq-kyma-kubeconfig', variable: 'KUBECONFIG')]) {
+                        sh '''
+                            kubectl get namespace procureiq || kubectl create namespace procureiq
+                            kubectl apply -f k8s/service-instance.yaml
+                            kubectl apply -f k8s/service-binding.yaml
+                            kubectl wait --for=condition=Ready servicebinding/spend-anomaly-detector-xsuaa-binding -n procureiq --timeout=120s
+
+                            sed "s#spend-anomaly-detector:latest#spend-anomaly-detector:${GIT_COMMIT}#" k8s/deployment.yaml | kubectl apply -f -
+
+                            XSUAA_ISSUER=$(kubectl get secret spend-anomaly-detector-xsuaa-binding -n procureiq -o jsonpath='{.data.url}' | base64 -d)
+                            XSUAA_JWKS_URI="${XSUAA_ISSUER}/token_keys"
+                            export XSUAA_ISSUER XSUAA_JWKS_URI
+                            envsubst < k8s/apirule.yaml | kubectl apply -f -
+                        '''
+                    }
+                }
+            }
+        }
+    }
+}

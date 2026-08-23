@@ -1,8 +1,0 @@
-// Project "Piper" pipeline, driven entirely by .pipeline/config.yml's
-// stage/step toggles - the minimal, real form SAP's own samples use once
-// a project has a config.yml doing the actual work (the alternative -
-// explicit `stage(){ steps{ mtaBuild script:this } }` blocks per step - is
-// also valid Piper usage, but redundant once config.yml exists).
-@Library('piper-lib-os') _
-
-piperPipeline script: this

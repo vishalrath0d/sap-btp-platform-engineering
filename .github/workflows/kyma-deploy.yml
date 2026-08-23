@@ -1,0 +1,95 @@
+name: kyma deploy (all Kyma-bound services)
+
+# The Kyma-side counterpart to cf-deploy.yml - one file, even though it
+# currently deploys exactly one service (spend-anomaly-detector), because
+# the point is the same as cf-deploy.yml's: deploy is landscape-shaped,
+# test stays per-service (test.yml's spend-anomaly-detector job, gated on
+# its own path via dorny/paths-filter). Splitting deploy
+# by RUNTIME (CF vs Kyma) rather than by service is the real distinction
+# that matters here - the two tracks build genuinely different artifacts
+# (buildpack app vs. container image) and deploy through genuinely
+# different tooling (cf CLI vs kubectl + BTP Operator), so keeping that
+# split visible as two files (not one, not five) mirrors the actual
+# architecture rather than an arbitrary file-per-service convention.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Which environment to deploy"
+        required: true
+        type: choice
+        options: [dev, qa, prod]
+      confirm:
+        description: 'Type "deploy" to confirm you intend to run this against the real BTP account'
+        required: true
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+    secrets:
+      # GITHUB_TOKEN isn't listed here - it's the automatic, always-present
+      # per-run token (github.token), never a caller-supplied secret, so a
+      # reusable workflow's own `secrets:` block never needs to declare it.
+      KYMA_KUBECONFIG:
+        required: true
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  verify-confirmation:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify confirmation input
+        if: inputs.confirm != 'deploy'
+        run: |
+          echo "::error::Confirmation input must be exactly 'deploy' - got '${{ inputs.confirm }}'"
+          exit 1
+
+  spend-anomaly-detector:
+    needs: [verify-confirmation]
+    if: always() && needs.verify-confirmation.result != 'failure'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    defaults:
+      run:
+        working-directory: services/spend-anomaly-detector
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: services/spend-anomaly-detector
+          push: true
+          tags: ghcr.io/${{ github.repository }}/spend-anomaly-detector:${{ github.sha }}
+
+      - uses: azure/setup-kubectl@v4
+
+      - name: Configure kubeconfig
+        env:
+          KYMA_KUBECONFIG: ${{ secrets.KYMA_KUBECONFIG }}
+        run: |
+          mkdir -p "$HOME/.kube"
+          echo "$KYMA_KUBECONFIG" | base64 -d > "$HOME/.kube/config"
+
+      - name: Deploy to Kyma
+        run: |
+          kubectl get namespace procureiq || kubectl create namespace procureiq
+          kubectl apply -f k8s/service-instance.yaml
+          kubectl apply -f k8s/service-binding.yaml
+          kubectl wait --for=condition=Ready servicebinding/spend-anomaly-detector-xsuaa-binding -n procureiq --timeout=120s
+          sed "s#spend-anomaly-detector:latest#spend-anomaly-detector:${{ github.sha }}#" k8s/deployment.yaml | kubectl apply -f -
+          XSUAA_ISSUER=$(kubectl get secret spend-anomaly-detector-xsuaa-binding -n procureiq -o jsonpath='{.data.url}' | base64 -d)
+          XSUAA_JWKS_URI="${XSUAA_ISSUER}/token_keys"
+          export XSUAA_ISSUER XSUAA_JWKS_URI
+          envsubst < k8s/apirule.yaml | kubectl apply -f -

@@ -71,6 +71,32 @@ Mirrors `ai-ml-llm-ops`'s "known limitations" discipline — stating on purpose 
 | SAP Analytics Cloud, SAP Datasphere, SAP Signavio (process mining) | Distinct analytics/BI/process-mining product lines with their own specialist roles — tangential to a BTP extension-development/DevOps identity; including them would be scope creep into a different job family. |
 | SAP GUI / transaction-code work generally | The project's whole premise is BTP side-by-side extensibility specifically to *avoid* touching the ABAP-GUI core — reintroducing transaction-code work would contradict the Clean Core principle the charter is built around. |
 
+## Scope expansion (session 7 — resume-claim gap-check)
+
+Vishal's own SAP-track resume (`vishal-rathod-master-sap-resume.tex`) makes specific, concrete claims this project should be able to *demonstrate*, not just assert alongside: HANA Cloud + HDI containers via MTA, XSUAA custom scopes/role templates, **Kyma deployment via BTP Operator CRDs and APIRule for Istio-based ingress**, SAP CI/CD Service + Project Piper, **a Cloud Transport Management (TMS) landscape (DEV→TEST→PROD) with `.mtaext` per environment**, and **ABAP RAP patterns** + **SAP Integration Suite architectures**. The last three map directly onto this project's three still-empty folders (`services/supplier-master-abap`, `services/integration-flow`, `transport/cloud-transport-management`) — checked against the resume specifically so the portfolio can back up every line on it, not just the ones that happened to be easy to build locally.
+
+Researched rather than assumed (a repeat of session 3's discipline — check SAP's own current docs, don't guess): **both ABAP Environment and Integration Suite are provisionable as trial entitlements on the same plain 90-day trial subaccount this project already uses** — not a separate, specialized trial signup. Cloud Transport Management is too, via its own subscription + Landscape Wizard. This changes the previous sessions' "still account-gated" framing from *blocked* to *next in the provisioning queue*, now that the trial subaccount is real and `infra/terraform` has a verified live plan.
+
+What's genuinely still a hard limit, not a to-do: **ABAP RAP and Integration Suite iFlow authoring both require SAP's own GUI-based tooling** (SAP Business Application Studio + ADT for RAP; Integration Suite's web-based Cloud Integration designer for iFlows) — neither has a headless/CLI authoring path the way CAP development does, so neither can be built the way `procurement-core` was (write source, `npm test`, commit). The realistic plan, in order:
+
+1. Add `abap`/`integration-suite` trial entitlements to `infra/terraform`'s `entitlements` module (done this session — service_name/plan_name sourced from SAP's cockpit docs, flagged for confirmation against the next live `terraform plan`, same verify-don't-guess loop that already caught the CF/Kyma subdomain and count/depends_on bugs).
+2. Once applied: provision the ABAP Environment and Integration Suite instances (Terraform-managed for the entitlement + environment instance, same adaptive pattern as `cloudfoundry-env`/`kyma-env`; the *tenant* itself still needs its one-time cockpit-driven activation, which is normal even in real customer landscapes).
+3. Author `services/supplier-master-abap` in SAP Business Application Studio against the real ABAP Environment instance, then commit the real CDS view/behavior-definition source here via gCTS — the source is real, version-controlled ABAP Cloud code either way, BAS is just where it's typed, the same way a browser-based Fiori tools generator would be for a UI5 app.
+4. Author `services/integration-flow`'s iFlow in Integration Suite's Cloud Integration designer, export the real `.iflw`/BPMN2 package, commit it here.
+5. Configure `transport/cloud-transport-management`'s nodes/routes — realistically, given the trial's single real subaccount, as **CF-space-level nodes (dev/test/prod spaces within that one subaccount)** rather than the full separate-subaccount topology a paid landscape would use; documented as a deliberately scaled-down but structurally real demonstration of the same TMS mechanism, not a different one. `procurement-core`'s existing `mtaext-dev.mtaext` already anticipates this — `mtaext-qa.mtaext`/`mtaext-prod.mtaext` are the concrete next artifacts once nodes exist, wired into the transport-upload step of that service's CI.
+
+This sequence is gated on the same `terraform apply` review checkpoint everything else in `infra/terraform` already waits on — nothing above jumps ahead of that review.
+
+## Scope expansion (session 8 — writing steps 3-5 as real source now, ahead of the account gate)
+
+Vishal's direction: finish every repo-level/code-level artifact now, so that once `terraform apply` is reviewed and the account pieces are provisioned, "all that remains is testing/debugging/verifying" — not still-unwritten code. Steps 3-5 above were re-sequenced: instead of waiting for a live ABAP Environment/Integration Suite instance to *author* against, all three folders now hold real, complete source, written against SAP's own current documentation and reference patterns (not memorized), with each artifact's own honesty note on exactly what "real" means for it:
+
+- **`services/supplier-master-abap`** — a complete RAP business object (interface + consumption CDS views, managed behavior definition, behavior implementation class with real validation logic, service definition) modeling supplier master data as the system-of-record `procurement-core`'s own `Suppliers` entity would, in a real landscape, project from rather than own directly. One deliberate exception: the underlying DDIC table isn't hand-authored as XML — real ABAP Cloud developers create those through ADT's table wizard, not by typing DDIC metadata, and fabricating that file here would be a guess with no tool to catch a mistake, unlike the CDS/behavior source (which ADT syntax-checks on open). Its field list is documented in that folder's README instead.
+- **`services/integration-flow`** — a real Groovy mapping script (a verified 1:1 port of `legacy-supplier-mapper.js`'s already-tested logic, same enums, same error cases) and a real `.iflw` BPMN2 XML, its namespaces and Script-step shape grounded against a real, publicly committed iFlow file rather than invented from memory. Honestly labeled "should import cleanly, not yet confirmed against a live tenant" — the same verification level `infra/terraform`'s two new candidate entitlements carry until their own live apply.
+- **`transport/cloud-transport-management`** — a real node/route landscape definition (CF-space-scoped, per the plan above) and the two new `.mtaext` files (`mtaext-qa.mtaext`, `mtaext-prod.mtaext`) extending the pattern `mtaext-dev.mtaext` already established.
+
+**What this does and doesn't change**: none of this jumps ahead of the `terraform apply` review — nothing here was applied or deployed, and the ABAP/Integration Suite entitlements this all depends on are still candidate, unconfirmed values. What it does change: the actual authoring work is done, checked against real syntax and real prior art, so the remaining steps once the account is ready are import/provision/verify, not write-from-scratch.
+
 ## Domain coverage map
 
 ### `docs/concepts/` — theory, written after building the thing it explains, not before
@@ -96,10 +122,10 @@ Mirrors `ai-ml-llm-ops`'s "known limitations" discipline — stating on purpose 
 | Service | What it is |
 |---|---|
 | `procurement-core` | CAP/Node.js — Suppliers, PurchaseRequisitions, PurchaseOrders, Approvals workflow, OData v4 |
-| `supplier-master-abap` | ABAP Cloud/RAP business object on BTP ABAP Environment, OData-exposed, git-versioned via gCTS |
-| `spend-anomaly-detector` | Kyma-native event-driven microservice, subscribes to PO-created events via Event Mesh |
+| `supplier-master-abap` | ABAP Cloud/RAP business object (interface + consumption CDS views, managed behavior definition + implementation class, service definition) modeling supplier master data as `procurement-core`'s `Suppliers` would project from in a real landscape. **Real source written, not yet run** — no local ABAP Cloud runtime exists to run it against; see that folder's README for exactly what's verified vs. what needs a real ABAP Environment instance |
+| `spend-anomaly-detector` | Kyma-native event-driven microservice, subscribes to PO-created events via Event Mesh — Kyma deployment (BTP Operator + APIRule v2) written this session, see `k8s/` |
 | `ai-copilot` | RAG over supplier/contract docs via HANA Vector Engine + LLM, traced via Langfuse (trial/free-tier dual mode, see above) |
-| `integration-flow` | Integration Suite iFlow simulating legacy/non-SAP supplier feed ingestion — genuinely cloud-only tooling, stays blocked on the account |
+| `integration-flow` | Integration Suite iFlow (real BPMN2 `.iflw`, a real Groovy mapping script ported 1:1 from `legacy-supplier-mapper.js`'s already-tested logic) simulating legacy/non-SAP supplier feed ingestion. **Real source written, not yet run** — genuinely cloud-only authoring/import tooling, see that folder's README |
 | `legacy-erp-gateway` | A small mock "on-prem" legacy supplier system + a Destination-service-shaped connectivity abstraction in `procurement-core` — simulates the Cloud Connector boundary locally (documented as simulated, not tunneled — there's no real on-prem network segment to tunnel to on a laptop), closing the connectivity gap the research flagged as the project's starkest miss |
 | `api-gateway` | API Management simulation in front of `procurement-core` — API-key consumer auth, per-key rate limiting, an API Business Hub-style catalog. Verified full 3-hop end-to-end (client → gateway → procurement-core → legacy-erp-gateway); live testing surfaced and fixed two real bugs, one of them a genuine server-crashing bug in `procurement-core` itself (see that service's README) |
 | ~~`web-ui`~~ | **Decision (Phase 1)**: built as `procurement-core/srv/service-ui.cds` instead of a separate service — CAP's own convention once a project has real Fiori annotations, and it's what actually generates the List Report + Object Page UI at `/$fiori-preview` with zero hand-written frontend code. A standalone deployable Fiori Elements app (its own `webapp/` + `manifest.json` for html5-repo deployment) is a documented follow-up once deploying to BTP for real — that needs the Fiori Elements Yeoman generator or SAP's Fiori tools, neither of which run headlessly. |
@@ -107,7 +133,7 @@ Mirrors `ai-ml-llm-ops`'s "known limitations" discipline — stating on purpose 
 ### Platform layer
 - `infra/terraform` — `SAP/terraform-provider-btp`: subaccounts (dev/qa/prod), entitlements, CF org/space, Kyma, role collections
 - `ci-cd/piper`, `ci-cd/github-actions`, `ci-cd/sap-cicd-service` — three CI/CD paths, documented for what each is best at
-- `transport/cloud-transport-management` — CTMS nodes/routes, `.mtaext` per environment, ABAP transport promotion via gCTS
+- `transport/cloud-transport-management` — CTMS nodes/routes (**real config written, CF-space-scoped topology, not yet subscribed/applied**), `.mtaext` per environment (`mtaext-dev.mtaext`, `mtaext-qa.mtaext`, `mtaext-prod.mtaext` — all real), ABAP transport promotion via gCTS
 
 ### Operations layer (`docs/operations/`)
 - `environments.md` — dev/qa/prod posture across CF + Kyma + ABAP Environment
@@ -133,8 +159,8 @@ Mirrors `ai-ml-llm-ops`'s "known limitations" discipline — stating on purpose 
 | 1 (done) | `procurement-core` CAP service, local dev loop, Fiori Elements UI | Prepare |
 | 2 (done) | `ai-copilot` (RAG + local tracer); `spend-anomaly-detector` + real event integration | Explore / Fit-to-Standard — proving the core business scenario works before building the rest of the landscape around it |
 | 3 (in progress) | Comprehensiveness gap-check → `legacy-erp-gateway` (Cloud Connector/Destination simulation), scope-boundaries doc, MTX/multitenancy, Feature Flags, Job Scheduling+ANS, API Management layer | Explore (continued) — widening the fit-to-standard model before committing infra |
-| 4 | Terraform-provisioned trial landing zone; XSUAA + role collections; HANA Cloud + Vector Engine; CI/CD (Piper + GH Actions) to CF — all account-gated, starts once BTP trial details arrive | Realize |
-| 5 | ABAP Cloud/RAP module + gCTS; Kyma deployment; Cloud Transport Management multi-env promotion | Realize (continued) |
+| 4 (done, unapplied) | Terraform-provisioned trial landing zone; XSUAA + role collections; CI/CD (Piper + GH Actions + Kyma) written and CI-verified for all 5 services — real `terraform plan` verified live against the trial subaccount, `terraform apply` gated on review | Realize |
+| 5 (source done, unapplied) | ABAP Cloud/RAP module source + Integration Suite iFlow source + Cloud Transport Management config, all written this session — running/provisioning any of it needs the account review gate above to clear first | Realize (continued) |
 | 6 | Integration Suite iFlow; Cloud ALM wiring; SRE/observability docs; test hardening against real deployments | Deploy |
 | 7 | Documentation polish, diagrams, publish (GitHub, LinkedIn, Hashnode, SAP Community blog); resume/profile updates | Run |
 
@@ -147,3 +173,13 @@ Phases are sequential but not rigidly day-boxed — resuming work in any session
 - Real tests, real CI runs, real before/after evidence for any fix — not narrated, demonstrated.
 - Diagrams (Mermaid) followed by prose explaining *why*, not just *what*.
 - Dependency/version pins with inline rationale comments, not bare version ranges.
+
+## Alignment with SAP's own standards, not just internal ones
+
+Beyond the standards above (this project's own bar), it's checked against SAP's actual published guidance rather than generic DevOps practice relabeled "SAP":
+
+- **Clean Core** — the domain choice itself (side-by-side extension, never modifying an S/4HANA-style core) *is* this principle, not just a doc about it; `docs/concepts/02-extensibility-and-clean-core.md` covers it in depth.
+- **The SAP BTP Guidance Framework** (SAP's current architecture/development/security compass, spanning Architecture Guidance, Development & Administration, Data & Analytics, and Security/Governance guidance) — this project's Terraform-provisioned landing zone (one subaccount, scoped entitlements, environment-specific role collections), its Destination-service-shaped connectivity boundary (never a direct on-prem call), and its API Management layer in front of `procurement-core` are concrete instances of that framework's architecture and security guidance, not just references to it.
+- **SAP Activate** — the phased roadmap below is deliberately mapped onto Discover/Prepare/Explore/Realize/Deploy/Run (`docs/concepts/14-sap-activate-methodology.md`), SAP's own delivery methodology, rather than a generic "sprint 1/2/3" plan.
+- **CAP and RAP conventions** — CDS as the one modeling language across both frameworks (`docs/concepts/03-cap-programming-model.md`, `docs/concepts/04-abap-cloud-and-rap.md`), not a project-specific ORM.
+- **Where this project scales the pattern down rather than skips it** — stated explicitly, not hidden: Cloud Transport Management's real topology spans separate subaccounts; this project's trial provides one, so TMS nodes here are CF-space-level, a smaller but structurally identical instance of the same mechanism (see the ABAP/Integration Suite/TMS plan above).

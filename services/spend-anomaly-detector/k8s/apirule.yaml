@@ -1,0 +1,77 @@
+# APIRule v2 (gateway.kyma-project.io/v2) - verified against Kyma's
+# current docs, not the deprecated v1beta1 shape (SAP has been actively
+# migrating customers off v1beta1; the rule structure genuinely changed -
+# access strategy moved from an accessStrategies array to one strategy
+# field per rule: noAuth/jwt/extAuth).
+#
+# /health is noAuth on purpose - Kyma's own readiness/liveness probes (and
+# any external uptime check) need to reach it without a token. Every real
+# business endpoint requires a valid XSUAA-issued JWT, checked by Istio's
+# own JWT filter at the gateway - this request never reaches the pod at
+# all if the token is missing or invalid, which is what "gateway-level
+# auth" in service-instance.yaml's comment means concretely.
+#
+# ${XSUAA_ISSUER}/${XSUAA_JWKS_URI} are substituted by
+# .github/workflows/spend-anomaly-detector-ci.yml immediately before
+# `kubectl apply`, read from the real spend-anomaly-detector-xsuaa-binding
+# Secret's own `url` field once that binding exists - this can't be a
+# static value committed here the way the rest of this file is, the same
+# "known only after the real resource is provisioned" reality
+# infra/terraform's adaptive modules document for CF/Kyma.
+apiVersion: gateway.kyma-project.io/v2
+kind: APIRule
+metadata:
+  name: spend-anomaly-detector
+  namespace: procureiq
+spec:
+  gateway: kyma-system/kyma-gateway
+  hosts:
+    - spend-anomaly-detector-dev
+  service:
+    name: spend-anomaly-detector
+    namespace: procureiq
+    port: 4006
+  timeout: 30
+  rules:
+    - path: /health
+      methods: ["GET"]
+      noAuth: true
+    - path: /events/purchase-order-created
+      methods: ["POST"]
+      jwt:
+        authentications:
+          - issuer: ${XSUAA_ISSUER}
+            jwksUri: ${XSUAA_JWKS_URI}
+        authorizations:
+          - requiredScopes:
+              - "spend-anomaly-detector-dev.EventPublisher"
+    - path: /anomalies
+      methods: ["GET"]
+      jwt:
+        authentications:
+          - issuer: ${XSUAA_ISSUER}
+            jwksUri: ${XSUAA_JWKS_URI}
+    - path: /anomalies/*
+      methods: ["GET"]
+      jwt:
+        authentications:
+          - issuer: ${XSUAA_ISSUER}
+            jwksUri: ${XSUAA_JWKS_URI}
+    - path: /admin/flags
+      methods: ["GET"]
+      jwt:
+        authentications:
+          - issuer: ${XSUAA_ISSUER}
+            jwksUri: ${XSUAA_JWKS_URI}
+    - path: /jobs/nightly-digest
+      methods: ["POST"]
+      jwt:
+        authentications:
+          - issuer: ${XSUAA_ISSUER}
+            jwksUri: ${XSUAA_JWKS_URI}
+    - path: /alerts
+      methods: ["GET"]
+      jwt:
+        authentications:
+          - issuer: ${XSUAA_ISSUER}
+            jwksUri: ${XSUAA_JWKS_URI}

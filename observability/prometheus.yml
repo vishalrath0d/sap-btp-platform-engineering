@@ -1,0 +1,30 @@
+# Scrapes every service's real /metrics endpoint (see each service's
+# src/metrics.js or, for procurement-core, server.js + srv/lib/metrics.js)
+# - the local stand-in for what Kyma-side Prometheus/Application Logging
+# would do against a real deployed landscape (docs/operations/
+# observability.md). Container names (not localhost) as scrape targets -
+# this file runs inside the `prometheus` container on docker-compose's
+# own network, same reasoning as destination.js's env-var override.
+global:
+  scrape_interval: 15s
+
+scrape_configs:
+  - job_name: procurement-core
+    static_configs:
+      - targets: ["procurement-core:4004"]
+
+  - job_name: api-gateway
+    static_configs:
+      - targets: ["api-gateway:4008"]
+
+  - job_name: spend-anomaly-detector
+    static_configs:
+      - targets: ["spend-anomaly-detector:4006"]
+
+  - job_name: legacy-erp-gateway
+    static_configs:
+      - targets: ["legacy-erp-gateway:4007"]
+
+  - job_name: ai-copilot
+    static_configs:
+      - targets: ["ai-copilot:4005"]

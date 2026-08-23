@@ -1,0 +1,20 @@
+# Plain `cf push` manifest, not an MTA - unlike procurement-core, this
+# service has no HANA HDI container or XSUAA binding to co-deploy, so an
+# MTA's multi-module bundling doesn't earn its keep here. Real SAP BTP
+# landscapes mix both: MTA where a service genuinely bundles multiple
+# resources together, a plain manifest where it doesn't.
+---
+applications:
+  - name: ai-copilot
+    memory: 256M
+    disk_quota: 512M
+    buildpacks:
+      - nodejs_buildpack
+    command: npm start
+    env:
+      NODE_ENV: production
+      # OLLAMA_BASE_URL deliberately not set here - see this service's
+      # README and docs/concepts/09-ai-on-btp.md: the deployed target is
+      # SAP AI Core / Generative AI Hub, not a self-hosted Ollama instance,
+      # and that integration is a documented follow-up gated on BTP free
+      # tier being enabled, not the plain trial this manifest deploys to.

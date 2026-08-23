@@ -4,8 +4,9 @@ The "no infrastructure to host" option — a managed, BTP-hosted CI/CD
 service, configured through the cockpit UI rather than a file in this repo.
 Same Piper engine underneath as the Jenkins track; the *config* is entered
 through a job editor, but it reads the same `.pipeline/config.yml` this
-project already has at `services/procurement-core/.pipeline/config.yml` —
-nothing to duplicate here.
+project already has at the repo root (shared by both `Jenkinsfile.cf` and
+`Jenkinsfile.kyma` — see `ci-cd/piper/README.md`) — nothing to duplicate
+here.
 
 ## The real setup sequence
 
@@ -21,7 +22,8 @@ Delivery (CI/CD) Service" mission — not guessed):
 7. Set up the webhook in this repo's GitHub settings
 8. Create a CI/CD job via the Job Editor — an SAP Fiori pipeline template,
    or a custom YAML-based definition for a project with subfolders like
-   this monorepo (`services/procurement-core`)
+   this monorepo (one job per service for test, mirroring the GitHub
+   Actions/Jenkins tracks' own per-service test / per-runtime deploy split)
 9. Deployment verification in the subaccount's HTML5 Applications section
 
 ## Why this project doesn't use this as its primary CI

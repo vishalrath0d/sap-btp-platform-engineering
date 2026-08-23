@@ -1,0 +1,162 @@
+name: test
+
+# One file for all five services, not five - a real, standard monorepo
+# pattern (dorny/paths-filter, a widely-used real action for exactly
+# this): one `changes` job inspects which paths this push/PR actually
+# touched, every service's test job then runs conditionally on its own
+# path having changed. This keeps the actual property that mattered about
+# the earlier five-file design (a change to one service doesn't re-run
+# every other service's tests, each PR gets a fast, correctly-scoped
+# status check per service) while cutting the file count - the five
+# separate files weren't earning their separateness, since none of them
+# differed in trigger shape, only in which path/working-directory they
+# used.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      procurement-core: ${{ steps.filter.outputs.procurement-core }}
+      ai-copilot: ${{ steps.filter.outputs.ai-copilot }}
+      api-gateway: ${{ steps.filter.outputs.api-gateway }}
+      legacy-erp-gateway: ${{ steps.filter.outputs.legacy-erp-gateway }}
+      spend-anomaly-detector: ${{ steps.filter.outputs.spend-anomaly-detector }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            procurement-core:
+              - 'services/procurement-core/**'
+            ai-copilot:
+              - 'services/ai-copilot/**'
+            api-gateway:
+              - 'services/api-gateway/**'
+            legacy-erp-gateway:
+              - 'services/legacy-erp-gateway/**'
+            spend-anomaly-detector:
+              - 'services/spend-anomaly-detector/**'
+
+  procurement-core:
+    needs: changes
+    if: needs.changes.outputs.procurement-core == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/procurement-core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: services/procurement-core/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+      # Build-verification, not deploy (deploy lives in cf-deploy.yml) -
+      # proves the real deployable MTA artifact actually builds on every
+      # change, catching a build break independently of whether anyone
+      # is deploying right now.
+      - name: cds build --production
+        run: |
+          # -p @sap/cds-dk pinned explicitly - see mta.yaml's own comment
+          # for the real CI failure this fixes (bare `npx cds` fails
+          # intermittently: "could not determine executable to run").
+          npx -p @sap/cds-dk cds build --production
+      - run: npm install -g mbt && mbt build --platform cf
+      - uses: actions/upload-artifact@v4
+        with:
+          name: procurement-core-mtar
+          path: services/procurement-core/mta_archives/*.mtar
+          retention-days: 14
+
+  ai-copilot:
+    needs: changes
+    if: needs.changes.outputs.ai-copilot == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/ai-copilot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: services/ai-copilot/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  api-gateway:
+    needs: changes
+    if: needs.changes.outputs.api-gateway == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/api-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: services/api-gateway/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  legacy-erp-gateway:
+    needs: changes
+    if: needs.changes.outputs.legacy-erp-gateway == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/legacy-erp-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: services/legacy-erp-gateway/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+  spend-anomaly-detector:
+    needs: changes
+    if: needs.changes.outputs.spend-anomaly-detector == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write # needed to push to ghcr.io in the image-build step below
+    defaults:
+      run:
+        working-directory: services/spend-anomaly-detector
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: services/spend-anomaly-detector/package-lock.json
+      - run: npm ci
+      - run: npm test
+
+      # Build-verification, not deploy (deploy lives in kyma-deploy.yml) -
+      # same reasoning as procurement-core's mbt build above.
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: services/spend-anomaly-detector
+          push: true
+          tags: ghcr.io/${{ github.repository }}/spend-anomaly-detector:${{ github.sha }}

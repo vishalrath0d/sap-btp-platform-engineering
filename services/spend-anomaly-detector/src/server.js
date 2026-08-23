@@ -7,14 +7,18 @@ const store = require('./store');
 const featureFlags = require('./feature-flags');
 const jobScheduler = require('./job-scheduler');
 const alertNotification = require('./alert-notification');
+const metrics = require('./metrics');
 
 function createApp() {
   const app = express();
+  app.use(metrics.httpMiddleware);
   app.use(express.json());
 
   app.get('/health', (req, res) => {
     res.json({ status: 'ok', reviewedCount: store.list({ limit: 1e9 }).length });
   });
+
+  app.get('/metrics', metrics.handler);
 
   /**
    * Local stand-in for a Kyma event subscription. In production this
@@ -31,6 +35,7 @@ function createApp() {
     }
 
     const { flags, severity } = rules.evaluate(po);
+    metrics.reviewsTotal.inc({ severity });
     const review = store.record(po.poNumber, {
       severity,
       flags,

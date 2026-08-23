@@ -27,7 +27,18 @@ function getDestination(name) {
   if (!destination) {
     throw new Error(`No destination configured named "${name}" (checked srv/lib/destinations.json)`);
   }
-  return destination;
+
+  // `localhost` in destinations.json only resolves when this app and the
+  // system it's simulating a destination to are on the same host (`npm
+  // start` outside Docker). Inside docker-compose each service is its own
+  // container with its own network namespace, reached by compose service
+  // name instead - so an env var of the shape `<NAME>_URL` overrides the
+  // file's URL when set. This mirrors real destination configuration too:
+  // a destination's URL genuinely does differ per landscape (dev/qa/prod
+  // point at different hosts) rather than being one fixed value baked
+  // into the app.
+  const override = process.env[`${name}_URL`];
+  return override ? { ...destination, URL: override } : destination;
 }
 
 module.exports = { getDestination };

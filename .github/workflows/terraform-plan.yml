@@ -60,17 +60,39 @@ jobs:
 
       - name: Post plan as PR comment
         uses: actions/github-script@v7
+        # Real bug hit on this exact PR: `${{ steps.plan.outputs.stdout }}`
+        # (the wrapper output hashicorp/setup-terraform's `wrapper: true`
+        # default captures automatically - no manual $GITHUB_OUTPUT needed)
+        # was previously interpolated directly into the inline `script:`
+        # text below. That substitution happens at the YAML level, before
+        # Node ever sees the file - so it lands as literal JS *source*, not
+        # a string value. Terraform plan output routinely contains
+        # backticks and `${...}` (JSON-encoded `parameters` blocks, HCL
+        # interpolation echoed in resource addresses/diffs) - either one
+        # closes the template literal early, and whatever plan text follows
+        # gets parsed as JS statements. That's exactly what produced
+        # `SyntaxError: Unexpected identifier 'subaccount_id'` - a
+        # `subaccount_id = "..."` line from the plan diff, landing outside
+        # the (now-closed) string as a bare token. Fix: pass the plan text
+        # through `env:` instead - an env var assignment is never
+        # re-parsed as code - and read it at runtime via `process.env`.
+        env:
+          PLAN_STDOUT: ${{ steps.plan.outputs.stdout }}
+          PLAN_OUTCOME: ${{ steps.plan.outcome }}
         with:
           script: |
-            const output = `#### Terraform Plan (${{ env.TF_ENVIRONMENT }})
-            \`\`\`
-            ${{ steps.plan.outputs.stdout }}
-            \`\`\``;
+            const maxLength = 60000; // GitHub PR comment body cap is 65536 chars
+            let planText = process.env.PLAN_STDOUT || "(no output captured)";
+            if (planText.length > maxLength) {
+              planText = planText.slice(0, maxLength) + "\n\n... (truncated - see the full run log)";
+            }
+            const status = process.env.PLAN_OUTCOME === "success" ? "✅ Plan succeeded" : "❌ Plan failed";
+            const output = `#### Terraform Plan (${status}) — ${{ env.TF_ENVIRONMENT }}\n<details><summary>Show plan</summary>\n\n\`\`\`hcl\n${planText}\n\`\`\`\n\n</details>`;
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: output
+              body: output,
             });
 
       - name: Fail if plan step failed

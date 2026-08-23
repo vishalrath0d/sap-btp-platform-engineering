@@ -1,45 +1,98 @@
-# Project Piper (Jenkins)
+# Project Piper (Jenkins) — and, separately, on GitHub Actions
 
-Real files: `services/procurement-core/.pipeline/config.yml` and
-`services/procurement-core/Jenkinsfile` — see `ci-cd/README.md` for why
-they live there, not here.
+Piper isn't Jenkins-only. Its real steps (`mtaBuild`, `cloudFoundryDeploy`,
+`kanikoExecute`, ...) are implemented once, in Go, and shipped two ways:
+the `piper-lib-os` Jenkins shared library (this page, `Jenkinsfile.cf`/
+`Jenkinsfile.kyma`), and a standalone Go binary anyone can run from any
+CI system — including GitHub Actions, via `.github/workflows/
+piper-cf-deploy.yml` and `piper-kyma-deploy.yml` (see `ci-cd/github-actions/
+README.md`'s "Is Project Piper still real..." section for the full
+Jenkins-vs-GitHub-Actions story, and why `project-piper-action`, SAP's
+old GitHub Actions *wrapper*, is deprecated but the binary itself isn't).
 
-## What the Jenkinsfile actually does
+## The Jenkins track
 
-```groovy
-@Library('piper-lib-os') _
-piperPipeline script: this
-```
+Real files: `.pipeline/config.yml` (repo root, shared), `Jenkinsfile.cf`,
+`Jenkinsfile.kyma` (also repo root) — see `ci-cd/README.md` for why they
+live there, not here, and for why two Jenkinsfiles rather than one.
 
-The minimal, real form — once `.pipeline/config.yml` exists and defines
-`stages`/`steps`, `piperPipeline` reads it and runs whatever's toggled on.
-The alternative (explicit `stage(){ steps{ mtaBuild script: this } }`
-blocks per step) is also valid Piper usage — SAP's own `leverx`-style
-reference pipelines use that style — but it's redundant once a
-`config.yml` is doing the real work, so this project uses the shorter form.
+## Two pipelines, split by runtime, not by service
 
-## Pipeline stages (from `.pipeline/config.yml`)
+- **`Jenkinsfile.cf`** — the whole Cloud Foundry-bound landscape:
+  `procurement-core` (MTA, via `mtaBuild` + `cloudFoundryDeploy` with
+  `mtaDeployPlugin`), `ai-copilot`/`api-gateway`/`legacy-erp-gateway`
+  (plain `cf push`, via `cloudFoundryDeploy` with `deployTool: cf_native`).
+  Explicit scripted stages, not the implicit `piperPipeline script: this`
+  form alone — this pipeline calls `cloudFoundryDeploy` four times with
+  three different parameter sets, which the implicit form (one global
+  parameter set per step name, from config.yml) can't express. This
+  project's own note in `Jenkinsfile.cf` covers the reasoning in full;
+  explicit stages are real, valid Piper usage, not a workaround.
+- **`Jenkinsfile.kyma`** — `spend-anomaly-detector`: `kanikoExecute` for a
+  daemonless container build+push (the standard choice on a Jenkins agent
+  without Docker-in-Docker), then plain `kubectl`/`envsubst` steps for the
+  BTP Operator `ServiceInstance`/`ServiceBinding` + `APIRule` sequence —
+  no single Piper step expresses "provision, wait for the binding, read a
+  real value out of its Secret, template it into another manifest, apply
+  that," the same reasoning `.github/workflows/kyma-deploy.yml` documents
+  for using raw `kubectl` there too.
 
-1. **Build** — `npmExecuteLint` (currently non-blocking — no lint config is
-   committed yet, so this gate doesn't do anything real; flagged honestly
-   rather than left silently toothless)
-2. **Additional Unit Tests** — `npmExecuteScripts` runs `npm test`
-3. **Release** — `mtaBuild` (via `mtaBuildTool: cloudMbt`) then
-   `cloudFoundryDeploy`, targeting the `procureiq-dev` org / `dev` space
+Both read the same shared `.pipeline/config.yml` (Piper's steps
+default-load one config file per checkout, whether called via the
+implicit orchestrator or explicit stages) for what's genuinely common
+(`general.buildTool`, lint/test toggles); per-module deploy parameters
+that differ between apps live in each Jenkinsfile's explicit stage calls.
+
+Both pipelines' `Test` stage(s) also use Jenkins Declarative Pipeline's
+own real `when { changeset "services/<name>/**" }` directive — a change
+to one service's files doesn't trigger every other service's test stage,
+the same real change-detection property `.github/workflows/test.yml`'s
+`dorny/paths-filter` job gives on the GitHub Actions side, expressed in
+Jenkins's own native syntax rather than a third-party action.
 
 ## Verified, not guessed
 
-Every step name and parameter in `.pipeline/config.yml`
-(`cfCredentialsId`, `apiEndpoint`, `mtaExtensionDescriptor`, etc.) was
-checked against `SAP/jenkins-library`'s real step metadata
-(`resources/metadata/mtaBuild.yaml`, `cloudFoundryDeploy.yaml`) — not
-written from memory.
+Every step name and parameter (`mtaBuild`, `cloudFoundryDeploy`'s
+`deployTool: cf_native` shape — `cloudFoundry.org`/`space`/
+`credentialsId`/`apiEndpoint`, `manifest` defaulting to `manifest.yml` —
+`kanikoExecute`) was checked against `SAP/jenkins-library`'s real step
+metadata and the current project-piper.io docs while building this
+project, not written from memory.
+
+## The GitHub Actions track
+
+Full parity with the Jenkins track now — a real Piper path for both
+runtimes, not just CF:
+
+- **`.github/workflows/piper-cf-deploy.yml`** — installs the real `piper`
+  binary (`wget https://github.com/SAP/jenkins-library/releases/latest/
+  download/piper`, confirmed real and current) and calls `piper mtaBuild` /
+  `piper cloudFoundryDeploy` directly as CLI subcommands, mirroring
+  `Jenkinsfile.cf`'s steps.
+- **`.github/workflows/piper-kyma-deploy.yml`** — same real binary, calls
+  `piper kanikoExecute` for the image build+push (the same Go step
+  `Jenkinsfile.kyma`'s `kanikoExecute` call invokes), then plain
+  `kubectl`/`envsubst` for the BTP Operator + `APIRule` sequence, exactly
+  mirroring `Jenkinsfile.kyma`'s own split and its own reasoning for why
+  that sequence isn't a single Piper step.
+
+Both are wired into `deploy.yml`'s `target` input (`piper-cf`/
+`piper-kyma`) as alternate mechanisms to the plain-CLI `cf`/`kyma`
+targets, not additional runs alongside them. Their CLI flag names are
+sourced from `piper <step> --help` and project-piper.io's docs, not yet
+confirmed against a live run (no Jenkins/Piper-CLI execution has happened
+in this project so far) — flagged the same way this project flags every
+not-yet-live-verified piece, not asserted with false confidence.
 
 ## Not yet wired up
 
 - No Jenkins server exists for this project yet — there's nothing to
-  actually run this pipeline against. The files are real and correct;
-  running them is an account-and-infrastructure-gated next step.
+  actually run either Jenkins pipeline against. The files are real and
+  complete; running them is an account-and-infrastructure-gated next step.
+- Both Jenkinsfiles' deploy stages are gated behind `when { expression {
+  false } }` — this project's Groovy equivalent of every GitHub Actions
+  workflow's `if: false`, same build-first, deploy-after-review posture.
+- Neither `piper-cf-deploy.yml`'s nor `piper-kyma-deploy.yml`'s CLI
+  invocations have been run live yet - see "The GitHub Actions track" above.
 - `tmsUpload` (Cloud Transport Management promotion) is commented out in
-  `.pipeline/config.yml` — see `transport/cloud-transport-management` once
-  that's built.
+  `.pipeline/config.yml` — see `transport/cloud-transport-management`.

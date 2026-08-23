@@ -1,0 +1,41 @@
+# SAP BTP Operator custom resource - provisions a real XSUAA service
+# instance FROM Kyma, the same operator pattern used to bind any BTP
+# service to a workload running in-cluster (services.cloud.sap.com/v1,
+# confirmed against SAP's own sap-btp-service-operator repo and the
+# btp-manager tutorials - field names are serviceOfferingName/
+# servicePlanName, not offering/plan, which an earlier guess would have
+# gotten wrong).
+#
+# Why this service needs its own XSUAA instance at all: its
+# /events/purchase-order-created webhook is currently open (see
+# src/server.js) because nothing in this project's local Compose network
+# has a token to present. On Kyma, APIRule's own jwt access strategy
+# (apirule.yaml) validates the caller's token against THIS instance's
+# issuer before the request ever reaches the pod - gateway-level auth,
+# no xssec/token-parsing code needed in the Node app itself for this to
+# be real protection.
+apiVersion: services.cloud.sap.com/v1
+kind: ServiceInstance
+metadata:
+  name: spend-anomaly-detector-xsuaa
+  namespace: procureiq
+spec:
+  serviceOfferingName: xsuaa
+  servicePlanName: application
+  externalName: spend-anomaly-detector-xsuaa
+  parameters:
+    # Plain manifest, not templated - written for the dev namespace, same
+    # as infra/terraform/environments/dev being the only real one right
+    # now (see that folder's README). A qa/prod promotion would apply
+    # these through a kustomize overlay changing this xsappname suffix and
+    # metadata.namespace, not by hand-editing this file per environment.
+    xsappname: spend-anomaly-detector-dev
+    tenant-mode: dedicated
+    scopes:
+      - name: $XSAPPNAME.EventPublisher
+        description: Publish PurchaseOrderCreated events into spend-anomaly-detector
+    role-templates:
+      - name: EventPublisher
+        description: Services allowed to call this webhook (procurement-core)
+        scope-references:
+          - $XSAPPNAME.EventPublisher

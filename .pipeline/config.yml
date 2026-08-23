@@ -1,0 +1,37 @@
+# Project "Piper" shared configuration - read by every step call in both
+# Jenkinsfile.cf and Jenkinsfile.kyma (Piper's steps default-load
+# `.pipeline/config.yml` from the checkout root regardless of whether
+# they're invoked via the implicit `piperPipeline` orchestrator or
+# explicit per-stage calls, which both Jenkinsfiles use - there's one
+# shared config file per checkout, not one per pipeline). Settings that
+# differ per module (which manifest, which org/space, which deployTool)
+# live in each Jenkinsfile's explicit stage calls instead - see their own
+# header comments for why.
+#
+# Parameter names verified against SAP/jenkins-library's real step
+# metadata (resources/metadata/mtaBuild.yaml, npmExecuteScripts.yaml)
+# while building this project - not guessed.
+
+general:
+  buildTool: "mta"
+
+steps:
+  npmExecuteLint:
+    failOnError: false # not enforced yet - no lint config committed; flip
+                         # to true once one exists, rather than pretending
+                         # this gate does something it currently doesn't.
+
+  npmExecuteScripts:
+    runScripts: ["test"]
+
+  mtaBuild:
+    platform: "CF"
+    mtaBuildTool: "cloudMbt"
+
+  # Left commented, not deleted: the real TMS-based promotion path
+  # (transport/cloud-transport-management), an alternative to
+  # cloudFoundryDeploy pushing straight to one space per environment.
+  # tmsUpload:
+  #   credentialsId: "procureiq-tms-service-key"
+  #   nodeName: "DEV"
+  #   customDescription: "Automated Piper upload"

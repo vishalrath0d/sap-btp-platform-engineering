@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  LegacySupplierSync - see this folder's README for the full design and
+  what "verified" means for this file. Namespaces and the ifl:property
+  key/value shape for a Script step are grounded against a real, publicly
+  committed .iflw file (not invented from memory); the process/sequence-
+  flow structure below is deliberately schematic - a real Integration
+  Suite tenant's Cloud Integration designer is where the two HTTP
+  Receiver adapters' message-flow/participant wiring and the visual
+  layout (bpmndi) would actually get finished and validated, since no
+  live tenant exists yet to import this into and confirm.
+-->
+<bpmn2:definitions xmlns:bpmn2="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                    xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI"
+                    xmlns:dc="http://www.omg.org/spec/DD/20100524/DC"
+                    xmlns:di="http://www.omg.org/spec/DD/20100524/DI"
+                    xmlns:ifl="http:///com.sap.ifl.model/Ifl.xsd"
+                    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+                    id="Definitions_LegacySupplierSync">
+
+  <bpmn2:collaboration id="Collaboration_1" name="Collaboration">
+    <bpmn2:extensionElements>
+      <ifl:property>
+        <key>namespaceMapping</key>
+        <value></value>
+      </ifl:property>
+      <ifl:property>
+        <key>allowedHeaderList</key>
+        <value>*</value>
+      </ifl:property>
+    </bpmn2:extensionElements>
+    <bpmn2:participant id="Participant_Process" name="LegacySupplierSync" processRef="Process_1"/>
+  </bpmn2:collaboration>
+
+  <bpmn2:process id="Process_1" name="LegacySupplierSync">
+
+    <!--
+      Real deployment would trigger this on a schedule (see README's
+      diagram note - "a real deployment would schedule this, not the
+      on-demand action procurement-core exposes"). Modeled as a Timer
+      start event, real CPI pattern for scheduled iFlows.
+    -->
+    <bpmn2:startEvent id="StartEvent_1" name="Scheduled trigger">
+      <bpmn2:outgoing>SequenceFlow_1</bpmn2:outgoing>
+      <bpmn2:timerEventDefinition/>
+    </bpmn2:startEvent>
+
+    <bpmn2:callActivity id="CallActivity_FetchLegacy" name="Call legacy-erp-gateway: GET /legacy/suppliers">
+      <bpmn2:extensionElements>
+        <ifl:property>
+          <key>activityType</key>
+          <value>ExternalCall</value>
+        </ifl:property>
+        <ifl:property>
+          <key>cmdVariantUri</key>
+          <value>ctype::HTTP</value>
+        </ifl:property>
+        <ifl:property>
+          <key>httpMethod</key>
+          <value>GET</value>
+        </ifl:property>
+        <!--
+          Placeholder, not a real deployed route - legacy-erp-gateway
+          doesn't have one yet either (see infra/terraform's "not yet
+          applied" status). Real deployment would set this to the actual
+          CF route once it exists, likely via a Destination (matching
+          procurement-core's own ProxyType: OnPremise Destination
+          simulation for the same system) rather than a literal URL.
+        -->
+        <ifl:property>
+          <key>address</key>
+          <value>https://REPLACE-WITH-REAL-LEGACY-ERP-GATEWAY-ROUTE/legacy/suppliers</value>
+        </ifl:property>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>SequenceFlow_1</bpmn2:incoming>
+      <bpmn2:outgoing>SequenceFlow_2</bpmn2:outgoing>
+    </bpmn2:callActivity>
+
+    <bpmn2:callActivity id="CallActivity_MapScript" name="Map legacy shape -> ProcureIQ Supplier">
+      <bpmn2:extensionElements>
+        <ifl:property>
+          <key>activityType</key>
+          <value>Script</value>
+        </ifl:property>
+        <ifl:property>
+          <key>subActivityType</key>
+          <value>GroovyScript</value>
+        </ifl:property>
+        <ifl:property>
+          <key>script</key>
+          <value>mapLegacySupplier.groovy</value>
+        </ifl:property>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>SequenceFlow_2</bpmn2:incoming>
+      <bpmn2:outgoing>SequenceFlow_3</bpmn2:outgoing>
+    </bpmn2:callActivity>
+
+    <bpmn2:callActivity id="CallActivity_PushToCore" name="Call procurement-core: upsert Suppliers">
+      <bpmn2:extensionElements>
+        <ifl:property>
+          <key>activityType</key>
+          <value>ExternalCall</value>
+        </ifl:property>
+        <ifl:property>
+          <key>cmdVariantUri</key>
+          <value>ctype::HTTP</value>
+        </ifl:property>
+        <ifl:property>
+          <key>httpMethod</key>
+          <value>POST</value>
+        </ifl:property>
+        <!--
+          Same placeholder-URL honesty note as the legacy fetch step
+          above - procurement-core's own real deployed route doesn't
+          exist yet either (infra/terraform not yet applied).
+        -->
+        <ifl:property>
+          <key>address</key>
+          <value>https://REPLACE-WITH-REAL-PROCUREMENT-CORE-ROUTE/procurement/Suppliers</value>
+        </ifl:property>
+      </bpmn2:extensionElements>
+      <bpmn2:incoming>SequenceFlow_3</bpmn2:incoming>
+      <bpmn2:outgoing>SequenceFlow_4</bpmn2:outgoing>
+    </bpmn2:callActivity>
+
+    <bpmn2:endEvent id="EndEvent_1" name="Sync complete">
+      <bpmn2:incoming>SequenceFlow_4</bpmn2:incoming>
+      <bpmn2:messageEventDefinition/>
+    </bpmn2:endEvent>
+
+    <bpmn2:sequenceFlow id="SequenceFlow_1" sourceRef="StartEvent_1" targetRef="CallActivity_FetchLegacy"/>
+    <bpmn2:sequenceFlow id="SequenceFlow_2" sourceRef="CallActivity_FetchLegacy" targetRef="CallActivity_MapScript"/>
+    <bpmn2:sequenceFlow id="SequenceFlow_3" sourceRef="CallActivity_MapScript" targetRef="CallActivity_PushToCore"/>
+    <bpmn2:sequenceFlow id="SequenceFlow_4" sourceRef="CallActivity_PushToCore" targetRef="EndEvent_1"/>
+
+  </bpmn2:process>
+
+  <!--
+    Visual layout (bpmndi) deliberately omitted - Integration Suite's
+    designer regenerates this automatically on first open/save of an
+    imported iFlow that has valid process/sequenceFlow elements but no
+    diagram interchange section yet; hand-authoring correct x/y
+    coordinates here would be guessed, not verified, for zero real
+    benefit over letting the designer lay it out.
+  -->
+</bpmn2:definitions>
