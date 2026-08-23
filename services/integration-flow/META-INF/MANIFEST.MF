@@ -1,0 +1,10 @@
+Manifest-Version: 1.0
+Bundle-SymbolicName: LegacySupplierSync; singleton:=true
+Bundle-Name: LegacySupplierSync
+Bundle-Version: 1.0.0
+SAP-BundleType: IntegrationFlow
+SAP-NodeType: IFlow
+SAP-RuntimeProfile: iflmap
+SAP-StorageVersion: 1.9.0
+Require-Bundle: com.sap.it.rt.b2b.execution.model;bundle-version="1.0.0"
+Import-Package: com.sap.esb.webservice.audit.log,com.sap.it.op.agent.api,com.sap.it.op.agent.collector.api,com.sap.it.op.agent.mpl.api,com.sap.it.rt.emma.mp.remote.util

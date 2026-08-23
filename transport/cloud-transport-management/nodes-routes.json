@@ -1,0 +1,47 @@
+{
+  "_comment": "Shaped like SAP Cloud Transport Management's own node/route definition (the same JSON the Landscape Wizard produces and the TMS REST API accepts) - see this folder's README for why the topology is CF-space-scoped rather than cross-subaccount, and for which values below are real vs. placeholder.",
+  "nodes": [
+    {
+      "name": "DEV",
+      "description": "Development - real, matches infra/terraform's provisioned CF org/space",
+      "nodeType": "SOURCE",
+      "contentType": "MTA",
+      "target": {
+        "org": "procureiq-dev",
+        "space": "dev"
+      }
+    },
+    {
+      "name": "QA",
+      "description": "Quality Assurance - placeholder, same status as infra/terraform/environments/qa/terraform.tfvars",
+      "nodeType": "TRANSPORT",
+      "contentType": "MTA",
+      "target": {
+        "org": "procureiq-dev",
+        "space": "CHANGE_ME_NO_QA_SPACE_YET"
+      }
+    },
+    {
+      "name": "PROD",
+      "description": "Production - placeholder, same status as infra/terraform/environments/prod/terraform.tfvars",
+      "nodeType": "TARGET",
+      "contentType": "MTA",
+      "target": {
+        "org": "procureiq-dev",
+        "space": "CHANGE_ME_NO_PROD_SPACE_YET"
+      }
+    }
+  ],
+  "routes": [
+    {
+      "source": "DEV",
+      "target": "QA",
+      "description": "Automated - triggered by tmsUpload once wired into Jenkinsfile.cf/kyma-deploy's Kyma-side equivalent"
+    },
+    {
+      "source": "QA",
+      "target": "PROD",
+      "description": "Manual approval - a real production promotion should never be fully automatic; CTMS's own approval workflow on this route is the mechanism, the same intent this project's GitHub Actions workflows express via required-reviewer GitHub Environments"
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+_schema-version: "3.3"
+ID: procurement-core-qa
+extends: procurement-core
+description: "QA-environment overrides - see mtaext-dev.mtaext's comment for why this ID must be unique from the base MTA's own ID (procurement-core) and from every other environment's own extension ID (procurement-core-dev, procurement-core-prod)."
+
+resources:
+  - name: procurement-core-db
+    parameters:
+      service-plan: hdi-shared
+
+modules:
+  - name: procurement-core-srv
+    properties:
+      LOG_LEVEL: info
