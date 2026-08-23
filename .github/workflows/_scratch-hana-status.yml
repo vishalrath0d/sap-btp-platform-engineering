@@ -1,0 +1,30 @@
+name: scratch - hana instance status
+
+# Temporary diagnostic - is the terraform-created procureiq-dev-hana-cloud
+# instance actually ready/usable, or still provisioning in the
+# background past what Terraform's own "Creation complete" reported?
+# Delete this file once checked.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install cf CLI
+        run: |
+          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
+          sudo mv cf8 /usr/local/bin/cf
+      - name: cf login and check hana-cloud instance status
+        env:
+          CF_USERNAME: ${{ secrets.BTP_USERNAME }}
+          CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
+        run: |
+          cf api https://api.cf.us10-001.hana.ondemand.com
+          cf auth "$CF_USERNAME" "$CF_PASSWORD"
+          cf target -o 4cbf0c12trial -s dev
+          echo "=== services in dev space ==="
+          cf services
+          echo "=== subaccount-level service instance (terraform-managed) ==="
+          cf curl "/v3/service_instances?names=procureiq-dev-hana-cloud" | jq '.'
