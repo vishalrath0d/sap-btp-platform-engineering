@@ -57,7 +57,16 @@ jobs:
       - name: cds build --production
         run: |
           npm ci
-          npx cds build --production
+          # Bare `npx cds` intermittently fails ("could not determine
+          # executable to run") - real failure hit live on this branch's
+          # CI. @sap/cds is a real dependency here but doesn't ship the
+          # `cds` CLI itself (that's the separate @sap/cds-dk package) -
+          # npx normally papers over this by fetching @sap/cds-dk on the
+          # fly, but that on-the-fly resolution isn't reliable. Pinning it
+          # explicitly with `-p` is the fix, not a network retry - same
+          # root cause this service's own Dockerfile already documents
+          # for why it calls ./node_modules/.bin/cds-deploy directly.
+          npx -p @sap/cds-dk cds build --production
 
       - name: mbt build
         run: mbt build --platform cf

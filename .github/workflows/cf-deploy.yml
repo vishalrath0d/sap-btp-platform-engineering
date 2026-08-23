@@ -78,7 +78,16 @@ jobs:
         run: |
           npm install -g mbt
           npm ci
-          npx cds build --production
+          # Bare `npx cds` intermittently fails ("could not determine
+          # executable to run") - real bug hit live on this branch's CI,
+          # same underlying cause the procurement-core Dockerfile's own
+          # comment documents: @sap/cds is a real dependency here, but it
+          # doesn't ship the `cds` CLI itself - that's the separate
+          # @sap/cds-dk package. `npx cds` normally works anyway by
+          # fetching @sap/cds-dk on the fly, but that on-the-fly
+          # resolution isn't reliable - pinning it explicitly with `-p`
+          # is the fix, not a network retry.
+          npx -p @sap/cds-dk cds build --production
           mbt build --platform cf
       - name: Install cf CLI + multiapps plugin
         run: |

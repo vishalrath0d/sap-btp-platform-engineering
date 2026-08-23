@@ -60,7 +60,14 @@ pipeline {
         stage('Build MTA - procurement-core') {
             steps {
                 dir('services/procurement-core') {
-                    sh 'npx cds build --production'
+                    // `-p @sap/cds-dk` pinned explicitly, not bare `npx
+                    // cds` - real failure hit live in this repo's GitHub
+                    // Actions CI ("could not determine executable to
+                    // run"): @sap/cds is a real dependency here but
+                    // doesn't ship the `cds` CLI itself (that's the
+                    // separate @sap/cds-dk package), and npx's on-the-fly
+                    // fetch-and-resolve for a bare `cds` isn't reliable.
+                    sh 'npx -p @sap/cds-dk cds build --production'
                     mtaBuild script: this, platform: 'CF', mtaBuildTool: 'cloudMbt'
                 }
             }
