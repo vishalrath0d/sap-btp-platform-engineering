@@ -9,9 +9,16 @@ data "btp_subaccount_environment_instances" "all" {
 }
 
 locals {
+  # Same real gap fixed here as modules/kyma-env - matched only on
+  # environment_type before, never on state, so a CF org sitting in a
+  # non-OK state would have been silently adopted as if healthy. Filtering
+  # on state == "OK" means a broken org doesn't count as "existing" -
+  # this module tries to create a fresh one instead, and the API's own
+  # real name-conflict error surfaces the problem rather than this module
+  # hiding it.
   existing_cloudfoundry = [
     for env in data.btp_subaccount_environment_instances.all.values : env
-    if env.environment_type == "cloudfoundry"
+    if env.environment_type == "cloudfoundry" && env.state == "OK"
   ]
   cloudfoundry_exists = length(local.existing_cloudfoundry) > 0
 }

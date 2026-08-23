@@ -12,9 +12,21 @@ data "btp_subaccount_environment_instances" "all" {
 }
 
 locals {
+  # Real gap found and fixed: matching only on environment_type (not
+  # state) would silently ADOPT a Kyma instance sitting in a non-OK state
+  # (CREATION_FAILED, UPDATE_FAILED, ...) as if it were healthy - a real
+  # possibility, since a live apply on this exact project hit `environment
+  # instance is in failed state: CREATION_FAILED`. Filtering on
+  # `state == "OK"` means a broken instance simply doesn't count as
+  # "existing" here - this module will then try to create a fresh one
+  # with the same name, and the API itself will reject that with a real,
+  # visible name-conflict error rather than this module silently treating
+  # a broken instance as good. Not a hidden failure mode either way: fix
+  # the broken instance (cockpit or `btp list accounts/environment-
+  # instance --subaccount <id>`) once that conflict surfaces.
   existing_kyma = [
     for env in data.btp_subaccount_environment_instances.all.values : env
-    if env.environment_type == "kyma"
+    if env.environment_type == "kyma" && env.state == "OK"
   ]
   kyma_exists = length(local.existing_kyma) > 0
 }
