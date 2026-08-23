@@ -31,6 +31,11 @@ name: piper cf deploy (GitHub Actions, real Piper binary)
 # while the buildable directory is services/procurement-core/ - explicit
 # flags sidestep the relative-path ambiguity and are more transparent for
 # a showcase workflow anyway.
+#
+# PIPER_username/PIPER_password source from secrets.BTP_USERNAME/
+# BTP_PASSWORD - same real BTP trial behavior cf-deploy.yml's own comment
+# documents: a Cloud Foundry org on BTP authenticates with the same SAP
+# Universal ID as the cockpit login, no separate CF-specific secret needed.
 
 on:
   workflow_call:
@@ -96,8 +101,8 @@ jobs:
 
       - name: piper cloudFoundryDeploy
         env:
-          PIPER_username: ${{ secrets.CF_USERNAME }}
-          PIPER_password: ${{ secrets.CF_PASSWORD }}
+          PIPER_username: ${{ secrets.BTP_USERNAME }}
+          PIPER_password: ${{ secrets.BTP_PASSWORD }}
         run: |
           piper cloudFoundryDeploy \
             --deployType standard \

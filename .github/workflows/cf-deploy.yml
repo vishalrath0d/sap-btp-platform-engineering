@@ -31,6 +31,15 @@ name: cf deploy (all Cloud Foundry services)
 # deployables with separate release cadences, which is the actual point
 # of them being microservices. This pipeline coordinates WHEN they deploy
 # together; it doesn't erase that they're independently deployable units.
+#
+# Every `cf auth` call below sources its credentials from `secrets.
+# BTP_USERNAME`/`secrets.BTP_PASSWORD`, not separate CF_USERNAME/
+# CF_PASSWORD secrets - real BTP trial behavior, confirmed while actually
+# deploying: a Cloud Foundry org on BTP authenticates with the same SAP
+# Universal ID as the cockpit login, there's no separate CF-specific
+# credential to manage. The local env var names inside each step stay
+# CF_USERNAME/CF_PASSWORD for readability (that's what they're used for
+# in that step), only the secret they're populated from changed.
 
 on:
   workflow_dispatch:
@@ -100,8 +109,8 @@ jobs:
           cf install-plugin -f multiapps
       - name: cf login and deploy
         env:
-          CF_USERNAME: ${{ secrets.CF_USERNAME }}
-          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+          CF_USERNAME: ${{ secrets.BTP_USERNAME }}
+          CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
@@ -124,8 +133,8 @@ jobs:
           sudo mv cf8 /usr/local/bin/cf
       - name: cf login and push
         env:
-          CF_USERNAME: ${{ secrets.CF_USERNAME }}
-          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+          CF_USERNAME: ${{ secrets.BTP_USERNAME }}
+          CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
@@ -148,8 +157,8 @@ jobs:
           sudo mv cf8 /usr/local/bin/cf
       - name: cf login and push
         env:
-          CF_USERNAME: ${{ secrets.CF_USERNAME }}
-          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+          CF_USERNAME: ${{ secrets.BTP_USERNAME }}
+          CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
@@ -177,8 +186,8 @@ jobs:
           sudo mv cf8 /usr/local/bin/cf
       - name: cf login and push
         env:
-          CF_USERNAME: ${{ secrets.CF_USERNAME }}
-          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+          CF_USERNAME: ${{ secrets.BTP_USERNAME }}
+          CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
@@ -202,8 +211,8 @@ jobs:
           sudo mv cf8 /usr/local/bin/cf
       - name: cf login, push, and wire the live procurement-core URL
         env:
-          CF_USERNAME: ${{ secrets.CF_USERNAME }}
-          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+          CF_USERNAME: ${{ secrets.BTP_USERNAME }}
+          CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
@@ -233,8 +242,8 @@ jobs:
           sudo mv cf8 /usr/local/bin/cf
       - name: cf login and wire the live routes
         env:
-          CF_USERNAME: ${{ secrets.CF_USERNAME }}
-          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+          CF_USERNAME: ${{ secrets.BTP_USERNAME }}
+          CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
         run: |
           cf api https://api.cf.us10.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
