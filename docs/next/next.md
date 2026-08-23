@@ -191,6 +191,25 @@ from `/Users/vishal/Documents/sms-magic/smsmagic-projects/devops/`.
 Everything else identified in prior sessions' research has been addressed
 (documented, built, or explicitly and reasoned-ly deferred).
 
+## Idea parked for the end, if there's time (not a commitment)
+
+**Making the CF-bound services deployable to Kyma too (and vice versa) -
+genuine runtime swappability, not just the fixed CF-vs-Kyma split each
+service has today.** Explicitly *not* doing this now: today's split is
+architectural (see the session 9/10 discussion in conversation history -
+`spend-anomaly-detector` is event-driven, the other four are synchronous
+request/response, which is *why* each sits where it does, not an
+arbitrary assignment) and covers both CF and Kyma for real, which was the
+actual goal. Making every service swappable between runtimes would mean
+building a second deployable shape for each one (buildpack manifests for
+`spend-anomaly-detector`, or container images + K8s manifests for the
+other four) - real, doable, but a genuinely separate chunk of work with
+its own tradeoffs to design (e.g. a synchronous CAP app on Kyma needs its
+own Helm chart via `cds add kyma`, not just a Dockerfile), not something
+to half-do. Revisit only if there's spare time at the very end - keeping
+the current one-natural-runtime-per-service split is the better default
+otherwise, not a stopgap.
+
 ## Next steps, in order
 
 1. **HCP Terraform setup** (Vishal's action item) — create the free
