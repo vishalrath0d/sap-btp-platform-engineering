@@ -53,9 +53,29 @@ function createApp(vectorStore) {
 
 async function main() {
   const vectorStore = new VectorStore();
-  console.log(`[ai-copilot] ingesting corpus from ${config.corpusDir} ...`);
-  const stats = await vectorStore.ingest();
-  console.log(`[ai-copilot] ingested ${stats.files} document(s) into ${stats.chunks} chunk(s)`);
+
+  // Real bug hit live: ingest() embeds every corpus chunk via Ollama, and
+  // previously ran unconditionally and unguarded here - on any deploy
+  // target without a reachable Ollama (every CF push so far; this
+  // service's own manifest.yml comment already says the real target is
+  // SAP AI Core, not a self-hosted Ollama), embed()'s fetch throws, main()
+  // rejects, and the bottom of this file calls process.exit(1) before the
+  // app ever binds a port - CF then reports a crash loop (0/1 instances),
+  // not a real infra failure. /copilot/health already has a `degraded`
+  // concept for exactly "Ollama's unreachable" - startup should degrade
+  // the same way, not crash before that endpoint can ever serve.
+  const ollamaUp = await ollama.isReachable();
+  if (ollamaUp) {
+    console.log(`[ai-copilot] ingesting corpus from ${config.corpusDir} ...`);
+    try {
+      const stats = await vectorStore.ingest();
+      console.log(`[ai-copilot] ingested ${stats.files} document(s) into ${stats.chunks} chunk(s)`);
+    } catch (err) {
+      console.error('[ai-copilot] corpus ingestion failed, starting degraded (empty vector store):', err.message);
+    }
+  } else {
+    console.warn(`[ai-copilot] Ollama unreachable at ${config.ollamaBaseUrl}, starting degraded (empty vector store) - /copilot/ask will error per-request until it's reachable`);
+  }
 
   const app = createApp(vectorStore);
   app.listen(config.port, () => {

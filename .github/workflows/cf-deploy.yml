@@ -128,7 +128,7 @@ jobs:
           cf api https://api.cf.us10-001.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
           cf target -o 4cbf0c12trial -s ${{ inputs.environment }}
-          cf deploy mta_archives/*.mtar -e mtaext-${{ inputs.environment }}.mtaext --no-confirm
+          cf deploy mta_archives/*.mtar -e mtaext-${{ inputs.environment }}.mtaext -f
 
   ai-copilot:
     needs: [verify-confirmation]
