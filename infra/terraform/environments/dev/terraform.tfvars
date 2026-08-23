@@ -10,7 +10,13 @@ subaccount_subdomain = "4cbf0c12trial" # was wrongly "4cbf0c12trial-ga" - confir
 region = "us10" # confirmed: matches the real CF API endpoint
 # (api.cf.us10-001.hana.ondemand.com) shown in the
 # cockpit's own Cloud Foundry Environment panel
-kyma_administrators = ["you@example.com"]
+# Real bug hit live: a placeholder "you@example.com" left here from
+# earlier scaffolding, never replaced, is the near-certain cause of Kyma
+# creation failing in ~40 seconds - too fast to be real cluster
+# provisioning (which genuinely takes 15-20 minutes), consistent with an
+# immediate administrator-email validation rejection before provisioning
+# ever starts. Set to the real account owner's actual email.
+kyma_administrators = ["vishaljanusingrathod@gmail.com"]
 
 # btp_username / btp_password / xsuaa_xsappname: intentionally NOT here,
 # even as placeholders - Local-execution-mode HCP Terraform workspaces
