@@ -213,21 +213,30 @@ genuinely needing to be (re-)created.
 
 - No genuinely separate `qa`/`prod` subaccounts yet — the trial only
   provides one. Real multi-env promotion needs a paid landscape.
-- **Trial Kyma clusters can't be created via `terraform apply` at all** —
-  confirmed via two real, consecutive `CREATION_FAILED` apply failures
-  (both in ~40s, both a fast rejection, not real provisioning): the
-  cockpit's own Kyma tab shows the real reason ("To request a trial Kyma
-  cluster, follow the instructions in Getting Started with a Trial Kyma
-  Instance"), matching a real GitHub issue on `SAP/terraform-provider-btp`
-  reporting the identical "unauthorized" behavior for trial Kyma via this
-  API. The one-time fix is a manual cockpit step (Kyma Environment tab →
-  "Enable Kyma") — `modules/kyma-env`'s adaptive lookup then correctly
-  adopts it on the next plan/apply, no Terraform change needed for that
-  half. Also confirmed in SAP's own docs while chasing this down: a trial
-  Kyma cluster auto-expires and is deleted 14 days after creation.
-- Kyma provisioning genuinely takes 15-25 minutes once actually
-  triggered (via the cockpit, per above — not via `apply`, which fails
-  fast on trial); expect to wait there.
+- **This trial account has no self-service Kyma provisioning at all,
+  through any path** — confirmed twice over: two real, consecutive
+  `CREATION_FAILED` `terraform apply` failures (both in ~40s, too fast to
+  be real provisioning), then the identical failure trying the cockpit's
+  own native "Enable Kyma" wizard directly (not Terraform). SAP's real
+  documentation ("Getting Started with a Trial Kyma Instance," fetched via
+  SAP-docs' GitHub mirror since the live Help Portal page is JS-rendered)
+  confirms this is by design: a trial Kyma instance must be **requested
+  from SAP** — a support ticket for component `BC-CP-XF-KYMA`, or an email
+  to `kyma@sap.com` (subject `SAP BTP, Kyma Runtime Trial Request`,
+  including Global Account ID, Subaccount ID, administrator emails, and a
+  reason) — reviewed "on a case-by-case basis within one month," not
+  guaranteed. Not fixable from Terraform or any code in this repo — a
+  genuinely account-side, human-approval-gated step. `modules/kyma-env`'s
+  adaptive lookup will correctly adopt the cluster once SAP eventually
+  provisions it, no code change needed for that half. Everything else in
+  this project (CF, XSUAA, role collections, all 5 entitlements) is fully
+  live-verified and unaffected by this — only the Kyma cluster itself, and
+  by extension `spend-anomaly-detector`'s real deployed testing, is
+  blocked pending SAP's approval. Also confirmed in SAP's docs while
+  chasing this down: once approved and provisioned, a trial Kyma cluster
+  auto-expires and is deleted 14 days later — not a one-time setup.
+- Kyma provisioning, once SAP approves the request above, genuinely takes
+  15-25 minutes to actually finish; expect to wait there when it happens.
 - The adaptive CF/Kyma modules have only been proven against *this*
   trial's actual state (CF pre-existing, Kyma not) — the "creates on a
   fresh subaccount" half of the claim is architecturally sound and

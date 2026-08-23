@@ -1,28 +1,33 @@
 # Adaptive, same pattern as modules/cloudfoundry-env: look up what's
 # already provisioned, only create what's missing.
 #
-# Real, structural finding from two consecutive live apply failures on
-# this trial (both `environment instance is in failed state:
-# CREATION_FAILED`, both in ~40s - too fast to be real provisioning,
-# which takes 15-25 minutes): **trial Kyma clusters cannot be created
-# through this resource's generic environment-instance API at all** - the
-# cockpit's own Kyma Environment tab surfaced the real reason Terraform's
-# error didn't: "To request a trial Kyma cluster, follow the instructions
-# in Getting Started with a Trial Kyma Instance" - a cockpit-only "Enable
-# Kyma" action, confirmed against SAP's own docs and a matching real
-# GitHub issue on SAP/terraform-provider-btp reporting the identical
-# "unauthorized" behavior for trial Kyma creation via this API. Not a
-# code bug, not fixable from Terraform's side - the same class of
-# genuinely account-side manual step this project already documents for
-# ABAP RAP/Integration Suite authoring.
+# Real, structural finding, confirmed twice over on this trial - once via
+# two live `terraform apply` failures (`environment instance is in failed
+# state: CREATION_FAILED`, both in ~40s - too fast to be real
+# provisioning, which takes 15-25 minutes), then again by trying the
+# cockpit's own native "Enable Kyma" wizard directly (not Terraform at
+# all) and hitting the identical failure there too: **this trial account
+# does not have self-service Kyma provisioning at all, through any path**.
+# SAP's own real documentation ("Getting Started with a Trial Kyma
+# Instance", fetched via SAP-docs' GitHub mirror since the live Help
+# Portal page is JS-rendered and doesn't return real content to a plain
+# fetch) confirms this is by design, not a bug or a stale-docs situation:
+# a trial Kyma instance must be REQUESTED from SAP - open a support
+# ticket for component BC-CP-XF-KYMA, or email kyma@sap.com with subject
+# "SAP BTP, Kyma Runtime Trial Request" (Global Account ID, Subaccount
+# ID, administrator emails, reason for request) - and SAP reviews each
+# request "on a case-by-case basis within one month," may decline
+# incomplete/non-compliant ones. Not fixable from Terraform's side, or
+# from any code in this repo - a genuinely account-side, human-approval
+# gated step, a stronger version of the same class of thing this project
+# already documents for ABAP RAP/Integration Suite authoring.
 #
-# What this module still does correctly: once a trial Kyma cluster is
-# created via the cockpit's "Enable Kyma" flow, this module's adaptive
-# lookup (below) will find it and ADOPT it (0 create needed) on the next
-# plan/apply - no code change needed for that half, only the initial
-# creation needs the manual cockpit step. The `resource` block below stays
-# real and correct for a non-trial/paid subaccount, where this API
-# restriction is not expected to apply.
+# What this module still does correctly once that approval eventually
+# lands and SAP provisions the cluster: this module's adaptive lookup
+# (below) will find it and ADOPT it (0 create needed) on the next plan/
+# apply - no code change needed for that half. The `resource` block below
+# stays real and correct for a non-trial/paid subaccount, where this
+# approval gate is not expected to apply.
 #
 # Also worth knowing, confirmed in SAP's own docs while researching this:
 # trial Kyma clusters auto-expire and are deleted 14 days after creation -

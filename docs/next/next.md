@@ -1,9 +1,50 @@
 # Continuity notes — read this at the start of every session
 
-Last updated: 2026-08-23 (end of session 9 — CI/CD restructuring per
-direct feedback: one test.yml with real change-detection, terraform
-decoupled from deploy, a real GitHub Actions Piper track, real monitoring,
-ABAP RAP/Integration Suite iFlow/TMS backlog filled — see below)
+Last updated: 2026-08-23 (end of session 10 — real terraform apply
+attempts against the live account: found and fixed 3 real entitlement/
+role-collection/state-filter bugs, all 4 wrong entitlement names
+corrected to real values from `btp list accounts/entitlement`, and hit a
+genuine account-level blocker on Kyma — see below, this is the actual
+current blocking item)
+
+### Session 10 — real `terraform apply`, real bugs found and fixed, one genuine blocker hit
+
+**Fixed, all live-verified**: `modules/entitlements` and `modules/role-
+collections` are now adaptive (look up what's already granted/exists,
+only create what's missing) after a live apply failed on both — trial
+accounts pre-grant default entitlements automatically, and XSUAA
+auto-creates role collections from `xs-security.json`'s role templates,
+so Terraform trying to *create* either was always the wrong operation
+regardless of naming. All 5 entitlement `service_name`/`plan_name`
+guesses were also corrected to their real values (confirmed via `btp
+list accounts/entitlement` and the cockpit's Entitlements catalog) -
+`cloudfoundry/trial` not `standard`, `hana/hdi-shared` not
+`hana-cloud-trial` (which isn't a real entitlement at all -
+`procurement-core/mta.yaml` had the identical wrong name, fixed too),
+`abap-trial/shared` not `abap/trial`, `integrationsuite-trial/trial` not
+`integration-suite/trial`. `modules/cloudfoundry-env`/`kyma-env`'s
+adopt-lookup was also fixed to filter on `state == "OK"`, not just
+`environment_type` - it would otherwise have silently adopted a
+`CREATION_FAILED` instance as if healthy. `terraform plan` is fully clean
+now (adopts everything except the Kyma instance itself).
+
+**The real, current blocker - not fixable from code at all**: this trial
+account has **no self-service Kyma provisioning**, confirmed twice over
+(two live `terraform apply` `CREATION_FAILED` results, then the identical
+failure trying the cockpit's own native "Enable Kyma" wizard directly).
+SAP's real docs confirm this is by design - a trial Kyma instance must be
+**requested from SAP** (email `kyma@sap.com`, subject `SAP BTP, Kyma
+Runtime Trial Request`, with Global Account ID `d6ee969e-4694-46b4-9176-
+f571df734c28`, Subaccount ID `e40cb8d7-82ad-4851-a323-12751a62402e`, and
+administrator emails) and reviewed "on a case-by-case basis within one
+month." See `infra/terraform/modules/kyma-env/main.tf`'s own comment and
+`infra/terraform/README.md`'s Known limitations for the full story.
+**Next concrete step**: send that email (or open the `BC-CP-XF-KYMA`
+support ticket) - the sooner it's sent, the sooner the up-to-a-month clock
+starts. Everything else (CF, XSUAA, role collections, all 5 entitlements)
+is fully live-verified and completely unaffected by this - only the Kyma
+cluster itself, and by extension `spend-anomaly-detector`'s real deployed
+testing, waits on SAP's approval.
 
 ### Session 9 — CI/CD restructuring (direct feedback, not a redesign from scratch)
 
