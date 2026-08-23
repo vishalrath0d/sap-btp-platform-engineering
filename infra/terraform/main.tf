@@ -95,6 +95,17 @@ module "kyma_env" {
   administrators = var.kyma_administrators
 }
 
+module "hana_cloud" {
+  # Real gap found only once procurement-core's MTA deploy actually ran:
+  # "hana"/"hdi-shared" (see modules/entitlements) provisions HDI
+  # containers on an existing database, it doesn't create one - this
+  # module creates that database. See modules/hana-cloud/main.tf's
+  # header for the full real-error trail.
+  source        = "./modules/hana-cloud"
+  subaccount_id = module.subaccount.id
+  name_prefix   = "procureiq-${var.environment}"
+}
+
 module "xsuaa" {
   source                = "./modules/xsuaa"
   subaccount_id         = module.subaccount.id
