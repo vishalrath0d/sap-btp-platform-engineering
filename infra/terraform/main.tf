@@ -19,6 +19,22 @@ module "entitlements" {
     { service_name = "cloudfoundry", plan_name = "standard" },
     { service_name = "kymaruntime", plan_name = "trial" },
     { service_name = "hana-cloud-trial", plan_name = "hana-cloud-trial" },
+    # The two below are new - added to close the resume/portfolio gap on
+    # supplier-master-abap and services/integration-flow (see
+    # PROJECT_CHARTER.md's "ABAP Environment and Integration Suite" note).
+    # service_name/plan_name here are sourced from SAP's own cockpit
+    # documentation (the cockpit lists "ABAP Environment" / "Integration
+    # Suite" with a "trial" plan for each), not verified against the live
+    # entitlement catalog the way cloudfoundry/kymaruntime/hana-cloud-trial
+    # above were - this project doesn't have live btp CLI credentials in
+    # this environment to check the catalog directly. Flagged here exactly
+    # the way this file's own history already handles this class of risk:
+    # written from the best-sourced value, corrected from whatever the
+    # next real `terraform plan` run actually reports (that loop has
+    # already caught and fixed several wrong assumptions in this project -
+    # see infra/terraform/README.md's "Update - verified live" section).
+    { service_name = "abap", plan_name = "trial" },
+    { service_name = "integration-suite", plan_name = "trial" },
   ]
 }
 
