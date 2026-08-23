@@ -1,4 +1,4 @@
-name: terraform plan (dev)
+name: terraform plan
 
 # Runs on every PR touching infra/terraform - read-only, safe to run
 # automatically. Posts the plan as a PR comment so a review can happen
