@@ -1,9 +1,13 @@
 name: ai-copilot CI
 
-# Same monorepo convention as procurement-core-ci.yml - one workflow per
-# service, path-filtered. This service is a plain `cf push` app (see
-# manifest.yml), so its deploy job skips the MTA build steps
-# procurement-core's needs.
+# Test-only, path-filtered - the standard, real monorepo CI shape: a
+# change to this service shouldn't re-run every other service's tests,
+# and each PR gets one fast, correctly-scoped status check per service.
+# Deploy lives in .github/workflows/cf-deploy.yml instead, one pipeline
+# for the whole Cloud Foundry-bound landscape (this service + api-gateway
+# + legacy-erp-gateway + procurement-core) rather than a separate gated
+# job duplicated into every service's own file - see that file's header
+# comment for why deploy and test split this way.
 
 on:
   push:
@@ -36,31 +40,3 @@ jobs:
 
       - name: Run tests
         run: npm test
-
-  # Deploy is intentionally NOT wired to run automatically yet - see
-  # procurement-core-ci.yml's identical comment; this project's account
-  # strategy is build-first, deploy-after-review.
-  deploy-dev:
-    needs: test
-    runs-on: ubuntu-latest
-    environment: dev
-    if: false # remove once ready to deploy for real
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install cf CLI
-        run: |
-          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
-          sudo mv cf8 /usr/local/bin/cf
-
-      - name: cf login
-        env:
-          CF_USERNAME: ${{ secrets.CF_USERNAME }}
-          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
-        run: |
-          cf api https://api.cf.us10.hana.ondemand.com
-          cf auth "$CF_USERNAME" "$CF_PASSWORD"
-          cf target -o procureiq-dev -s dev
-
-      - name: cf push
-        run: cf push -f manifest.yml

@@ -1,0 +1,112 @@
+// Project "Piper" pipeline for the whole Cloud Foundry-bound landscape
+// (procurement-core, ai-copilot, api-gateway, legacy-erp-gateway) - one
+// pipeline, not one per service, same reasoning as
+// .github/workflows/cf-deploy.yml: these four are a bound landscape, not
+// four independently-released products, so deploying them is one
+// pipeline's job even though testing each stays its own concern.
+//
+// Explicit scripted stages, not the implicit `piperPipeline script: this`
+// form alone would drive - a deliberate choice, not a style preference:
+// this pipeline calls cloudFoundryDeploy FOUR times with three different
+// parameter sets (one MTA deploy via mtaDeployPlugin, three cf_native
+// pushes against different manifests) - the implicit form applies one
+// global parameter set per step name from config.yml, which can't express
+// "call this step four times, differently" on its own. This project's own
+// ci-cd/piper/README.md already names explicit stages as valid, real
+// Piper usage for exactly this reason. The repo-root `.pipeline/
+// config.yml` is still real and still read by every step call below
+// (explicit stages don't opt out of Piper's own config-file resolution) -
+// it carries the settings genuinely shared across both this pipeline and
+// Jenkinsfile.kyma (general.buildTool, lint/test toggles); per-module
+// deploy parameters that differ between the four CF apps live in this
+// file's explicit stage calls instead, since Piper's default config file
+// is one shared file per checkout, not a separate one per pipeline.
+//
+// Every step name and parameter below verified against SAP/jenkins-
+// library's real step metadata (mtaBuild.yaml, cloudFoundryDeploy.yaml)
+// and the current project-piper.io docs for cf_native's `manifest`/
+// `cloudFoundry.*` shape - not written from memory.
+
+@Library('piper-lib-os') _
+
+def cfTarget = [
+    apiEndpoint  : 'https://api.cf.us10.hana.ondemand.com',
+    org          : 'procureiq-dev',
+    space        : 'dev',
+    credentialsId: 'procureiq-cf-credentials',
+]
+
+pipeline {
+    agent any
+    stages {
+
+        stage('Test') {
+            parallel {
+                stage('procurement-core') {
+                    steps { dir('services/procurement-core') { sh 'npm ci && npm test' } }
+                }
+                stage('ai-copilot') {
+                    steps { dir('services/ai-copilot') { sh 'npm ci && npm test' } }
+                }
+                stage('api-gateway') {
+                    steps { dir('services/api-gateway') { sh 'npm ci && npm test' } }
+                }
+                stage('legacy-erp-gateway') {
+                    steps { dir('services/legacy-erp-gateway') { sh 'npm ci && npm test' } }
+                }
+            }
+        }
+
+        stage('Build MTA - procurement-core') {
+            steps {
+                dir('services/procurement-core') {
+                    sh 'npx cds build --production'
+                    mtaBuild script: this, platform: 'CF', mtaBuildTool: 'cloudMbt'
+                }
+            }
+        }
+
+        // Deploy stages are real and complete but not wired to run
+        // automatically - `when { expression { false } }` is this
+        // pipeline's equivalent of the GitHub Actions workflows'
+        // `if: false`, same build-first, deploy-after-review posture
+        // (PROJECT_CHARTER.md). Flip to `expression { true }` (or a real
+        // approval/branch condition) once ready.
+
+        stage('Deploy - procurement-core (MTA)') {
+            when { expression { false } }
+            steps {
+                dir('services/procurement-core') {
+                    cloudFoundryDeploy script: this,
+                        deployType: 'standard',
+                        mtaDeployParameters: '-f --version-rule ALL',
+                        mtaExtensionDescriptor: 'mtaext-dev.mtaext',
+                        cloudFoundry: cfTarget
+                }
+            }
+        }
+
+        stage('Deploy - ai-copilot, api-gateway, legacy-erp-gateway (cf_native)') {
+            when { expression { false } }
+            steps {
+                dir('services/ai-copilot') {
+                    cloudFoundryDeploy script: this, deployTool: 'cf_native', deployType: 'standard', cloudFoundry: cfTarget
+                }
+                dir('services/legacy-erp-gateway') {
+                    cloudFoundryDeploy script: this, deployTool: 'cf_native', deployType: 'standard', cloudFoundry: cfTarget
+                }
+                dir('services/api-gateway') {
+                    cloudFoundryDeploy script: this, deployTool: 'cf_native', deployType: 'standard', cloudFoundry: cfTarget
+                    // Same real ordering dependency cf-deploy.yml documents:
+                    // api-gateway needs procurement-core's live route.
+                    sh '''
+                        CORE_GUID=$(cf app procurement-core-srv --guid)
+                        CORE_URL=$(cf curl "/v3/apps/${CORE_GUID}/routes" | jq -r '.resources[0].url')
+                        cf set-env api-gateway PROCUREMENT_CORE_URL "https://${CORE_URL}/procurement"
+                        cf restage api-gateway
+                    '''
+                }
+            }
+        }
+    }
+}

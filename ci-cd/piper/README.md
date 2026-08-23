@@ -1,45 +1,52 @@
 # Project Piper (Jenkins)
 
-Real files: `services/procurement-core/.pipeline/config.yml` and
-`services/procurement-core/Jenkinsfile` — see `ci-cd/README.md` for why
-they live there, not here.
+Real files: `.pipeline/config.yml` (repo root, shared), `Jenkinsfile.cf`,
+`Jenkinsfile.kyma` (also repo root) — see `ci-cd/README.md` for why they
+live there, not here, and for why two Jenkinsfiles rather than one.
 
-## What the Jenkinsfile actually does
+## Two pipelines, split by runtime, not by service
 
-```groovy
-@Library('piper-lib-os') _
-piperPipeline script: this
-```
+- **`Jenkinsfile.cf`** — the whole Cloud Foundry-bound landscape:
+  `procurement-core` (MTA, via `mtaBuild` + `cloudFoundryDeploy` with
+  `mtaDeployPlugin`), `ai-copilot`/`api-gateway`/`legacy-erp-gateway`
+  (plain `cf push`, via `cloudFoundryDeploy` with `deployTool: cf_native`).
+  Explicit scripted stages, not the implicit `piperPipeline script: this`
+  form alone — this pipeline calls `cloudFoundryDeploy` four times with
+  three different parameter sets, which the implicit form (one global
+  parameter set per step name, from config.yml) can't express. This
+  project's own note in `Jenkinsfile.cf` covers the reasoning in full;
+  explicit stages are real, valid Piper usage, not a workaround.
+- **`Jenkinsfile.kyma`** — `spend-anomaly-detector`: `kanikoExecute` for a
+  daemonless container build+push (the standard choice on a Jenkins agent
+  without Docker-in-Docker), then plain `kubectl`/`envsubst` steps for the
+  BTP Operator `ServiceInstance`/`ServiceBinding` + `APIRule` sequence —
+  no single Piper step expresses "provision, wait for the binding, read a
+  real value out of its Secret, template it into another manifest, apply
+  that," the same reasoning `.github/workflows/kyma-deploy.yml` documents
+  for using raw `kubectl` there too.
 
-The minimal, real form — once `.pipeline/config.yml` exists and defines
-`stages`/`steps`, `piperPipeline` reads it and runs whatever's toggled on.
-The alternative (explicit `stage(){ steps{ mtaBuild script: this } }`
-blocks per step) is also valid Piper usage — SAP's own `leverx`-style
-reference pipelines use that style — but it's redundant once a
-`config.yml` is doing the real work, so this project uses the shorter form.
-
-## Pipeline stages (from `.pipeline/config.yml`)
-
-1. **Build** — `npmExecuteLint` (currently non-blocking — no lint config is
-   committed yet, so this gate doesn't do anything real; flagged honestly
-   rather than left silently toothless)
-2. **Additional Unit Tests** — `npmExecuteScripts` runs `npm test`
-3. **Release** — `mtaBuild` (via `mtaBuildTool: cloudMbt`) then
-   `cloudFoundryDeploy`, targeting the `procureiq-dev` org / `dev` space
+Both read the same shared `.pipeline/config.yml` (Piper's steps
+default-load one config file per checkout, whether called via the
+implicit orchestrator or explicit stages) for what's genuinely common
+(`general.buildTool`, lint/test toggles); per-module deploy parameters
+that differ between apps live in each Jenkinsfile's explicit stage calls.
 
 ## Verified, not guessed
 
-Every step name and parameter in `.pipeline/config.yml`
-(`cfCredentialsId`, `apiEndpoint`, `mtaExtensionDescriptor`, etc.) was
-checked against `SAP/jenkins-library`'s real step metadata
-(`resources/metadata/mtaBuild.yaml`, `cloudFoundryDeploy.yaml`) — not
-written from memory.
+Every step name and parameter (`mtaBuild`, `cloudFoundryDeploy`'s
+`deployTool: cf_native` shape — `cloudFoundry.org`/`space`/
+`credentialsId`/`apiEndpoint`, `manifest` defaulting to `manifest.yml` —
+`kanikoExecute`) was checked against `SAP/jenkins-library`'s real step
+metadata and the current project-piper.io docs while building this
+project, not written from memory.
 
 ## Not yet wired up
 
 - No Jenkins server exists for this project yet — there's nothing to
-  actually run this pipeline against. The files are real and correct;
+  actually run either pipeline against. The files are real and complete;
   running them is an account-and-infrastructure-gated next step.
+- Both Jenkinsfiles' deploy stages are gated behind `when { expression {
+  false } }` — this project's Groovy equivalent of every GitHub Actions
+  workflow's `if: false`, same build-first, deploy-after-review posture.
 - `tmsUpload` (Cloud Transport Management promotion) is commented out in
-  `.pipeline/config.yml` — see `transport/cloud-transport-management` once
-  that's built.
+  `.pipeline/config.yml` — see `transport/cloud-transport-management`.

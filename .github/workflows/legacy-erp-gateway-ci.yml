@@ -1,6 +1,7 @@
 name: legacy-erp-gateway CI
 
-# Same monorepo convention as procurement-core-ci.yml.
+# Test-only, path-filtered - see ai-copilot-ci.yml's comment for why
+# deploy lives in .github/workflows/cf-deploy.yml instead.
 
 on:
   push:
@@ -33,28 +34,3 @@ jobs:
 
       - name: Run tests
         run: npm test
-
-  deploy-dev:
-    needs: test
-    runs-on: ubuntu-latest
-    environment: dev
-    if: false # remove once ready to deploy for real - see procurement-core-ci.yml
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install cf CLI
-        run: |
-          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
-          sudo mv cf8 /usr/local/bin/cf
-
-      - name: cf login
-        env:
-          CF_USERNAME: ${{ secrets.CF_USERNAME }}
-          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
-        run: |
-          cf api https://api.cf.us10.hana.ondemand.com
-          cf auth "$CF_USERNAME" "$CF_PASSWORD"
-          cf target -o procureiq-dev -s dev
-
-      - name: cf push
-        run: cf push -f manifest.yml

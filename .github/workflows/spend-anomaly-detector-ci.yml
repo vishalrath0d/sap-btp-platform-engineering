@@ -5,10 +5,12 @@ name: spend-anomaly-detector CI
 # the natural fit for a K8s runtime rather than an MTA/buildpack app). CF
 # services in this repo (procurement-core, ai-copilot, api-gateway,
 # legacy-erp-gateway) build with buildpacks and `cf push`/`cf deploy`;
-# this one builds a real container image, pushes it to GitHub Container
-# Registry, and applies Kubernetes + BTP Operator + APIRule manifests with
-# kubectl against the Kyma cluster's kubeconfig - a genuinely different
-# deploy shape, not the same pipeline with different target names.
+# this one builds a real container image and pushes it to GitHub Container
+# Registry - a genuinely different build shape, not the same pipeline with
+# different target names. Test and image-build stay here (path-filtered,
+# same reasoning as every other service's CI); the actual kubectl/BTP
+# Operator/APIRule deploy lives in .github/workflows/kyma-deploy.yml, this
+# repo's Kyma-side counterpart to cf-deploy.yml.
 
 on:
   push:
@@ -71,51 +73,3 @@ jobs:
           context: services/spend-anomaly-detector
           push: true
           tags: ${{ steps.meta.outputs.image }}
-
-  # Deploy is intentionally NOT wired to run automatically yet - same
-  # build-first, deploy-after-review posture as every other service's CI
-  # in this repo.
-  deploy-dev:
-    needs: build-image
-    runs-on: ubuntu-latest
-    environment: dev
-    if: false # remove once ready to deploy for real
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install kubectl
-        uses: azure/setup-kubectl@v4
-
-      - name: Configure kubeconfig
-        env:
-          KYMA_KUBECONFIG: ${{ secrets.KYMA_KUBECONFIG }}
-        run: |
-          mkdir -p "$HOME/.kube"
-          echo "$KYMA_KUBECONFIG" | base64 -d > "$HOME/.kube/config"
-
-      - name: Ensure namespace exists
-        run: kubectl get namespace procureiq || kubectl create namespace procureiq
-
-      - name: Apply BTP Operator ServiceInstance + ServiceBinding
-        run: |
-          kubectl apply -f k8s/service-instance.yaml
-          kubectl apply -f k8s/service-binding.yaml
-          kubectl wait --for=condition=Ready servicebinding/spend-anomaly-detector-xsuaa-binding \
-            -n procureiq --timeout=120s
-
-      - name: Deploy the workload
-        run: |
-          sed "s#spend-anomaly-detector:latest#spend-anomaly-detector:${{ github.sha }}#" \
-            k8s/deployment.yaml | kubectl apply -f -
-
-      - name: Wire the real XSUAA issuer into APIRule and apply it
-        run: |
-          # The XSUAA binding secret's `url` field is this landscape's real
-          # issuer base - not knowable until the ServiceBinding above is
-          # actually Ready, same "known after apply" reality
-          # infra/terraform's adaptive modules already document for CF/Kyma.
-          XSUAA_ISSUER=$(kubectl get secret spend-anomaly-detector-xsuaa-binding \
-            -n procureiq -o jsonpath='{.data.url}' | base64 -d)
-          XSUAA_JWKS_URI="${XSUAA_ISSUER}/token_keys"
-          export XSUAA_ISSUER XSUAA_JWKS_URI
-          envsubst < k8s/apirule.yaml | kubectl apply -f -

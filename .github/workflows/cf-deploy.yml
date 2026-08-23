@@ -1,0 +1,173 @@
+name: cf deploy (all Cloud Foundry services)
+
+# One deploy pipeline for every Cloud Foundry-bound service, not one per
+# service - these four are a bound landscape (api-gateway calls
+# procurement-core, procurement-core calls legacy-erp-gateway), not four
+# independently-released products, so one pipeline that deploys and
+# sequences them correctly is the more honest shape than four separate
+# `if: false` jobs that all happened to exist in different files. Testing
+# stays per-service on purpose (procurement-core-ci.yml, ai-copilot-ci.yml,
+# etc.) - that split IS standard, real monorepo practice: a change to
+# ai-copilot shouldn't re-run procurement-core's test suite, and each PR
+# gets a fast, correctly-scoped status check. Deploying is the part that
+# benefits from being one pipeline; testing is the part that doesn't.
+#
+# `workflow_call` lets deploy-all.yml invoke this as one step in the full
+# landscape sequence (terraform apply -> this -> kyma-deploy.yml);
+# `workflow_dispatch` lets it run standalone when only the CF side needs
+# redeploying. Both paths read `inputs.environment` via the same unified
+# `inputs` context (real GitHub Actions feature - workflow_dispatch and
+# workflow_call inputs were unified onto one context, confirmed against
+# GitHub's own changelog, not assumed).
+#
+# Deliberately NOT one giant MTA bundling all four modules together: MTA
+# exists for resources genuinely bound at the deploy-artifact level
+# (procurement-core's app + its HDI container + its XSUAA instance, which
+# MUST version and deploy atomically) - these four services are separate
+# deployables with separate release cadences, which is the actual point
+# of them being microservices. This pipeline coordinates WHEN they deploy
+# together; it doesn't erase that they're independently deployable units.
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Which environment to deploy"
+        required: true
+        type: choice
+        options: [dev, qa, prod]
+      confirm:
+        description: 'Type "deploy" to confirm you intend to run this against the real BTP account'
+        required: true
+  workflow_call:
+    inputs:
+      environment:
+        required: true
+        type: string
+    secrets:
+      CF_USERNAME:
+        required: true
+      CF_PASSWORD:
+        required: true
+
+jobs:
+  verify-confirmation:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify confirmation input
+        if: inputs.confirm != 'deploy'
+        run: |
+          echo "::error::Confirmation input must be exactly 'deploy' - got '${{ inputs.confirm }}'"
+          exit 1
+
+  procurement-core:
+    needs: [verify-confirmation]
+    if: always() && needs.verify-confirmation.result != 'failure'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    defaults:
+      run:
+        working-directory: services/procurement-core
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build the MTA
+        run: |
+          npm install -g mbt
+          npm ci
+          npx cds build --production
+          mbt build --platform cf
+      - name: Install cf CLI + multiapps plugin
+        run: |
+          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
+          sudo mv cf8 /usr/local/bin/cf
+          cf install-plugin -f multiapps
+      - name: cf login and deploy
+        env:
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+        run: |
+          cf api https://api.cf.us10.hana.ondemand.com
+          cf auth "$CF_USERNAME" "$CF_PASSWORD"
+          cf target -o procureiq-${{ inputs.environment }} -s ${{ inputs.environment }}
+          cf deploy mta_archives/*.mtar -e mtaext-${{ inputs.environment }}.mtaext --no-confirm
+
+  ai-copilot:
+    needs: [verify-confirmation]
+    if: always() && needs.verify-confirmation.result != 'failure'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    defaults:
+      run:
+        working-directory: services/ai-copilot
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cf CLI
+        run: |
+          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
+          sudo mv cf8 /usr/local/bin/cf
+      - name: cf login and push
+        env:
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+        run: |
+          cf api https://api.cf.us10.hana.ondemand.com
+          cf auth "$CF_USERNAME" "$CF_PASSWORD"
+          cf target -o procureiq-${{ inputs.environment }} -s ${{ inputs.environment }}
+          cf push -f manifest.yml
+
+  legacy-erp-gateway:
+    needs: [verify-confirmation]
+    if: always() && needs.verify-confirmation.result != 'failure'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    defaults:
+      run:
+        working-directory: services/legacy-erp-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cf CLI
+        run: |
+          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
+          sudo mv cf8 /usr/local/bin/cf
+      - name: cf login and push
+        env:
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+        run: |
+          cf api https://api.cf.us10.hana.ondemand.com
+          cf auth "$CF_USERNAME" "$CF_PASSWORD"
+          cf target -o procureiq-${{ inputs.environment }} -s ${{ inputs.environment }}
+          cf push -f manifest.yml
+
+  api-gateway:
+    # The one real ordering dependency in this landscape: api-gateway
+    # needs procurement-core's live route to set PROCUREMENT_CORE_URL.
+    needs: [procurement-core]
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    defaults:
+      run:
+        working-directory: services/api-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install cf CLI
+        run: |
+          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
+          sudo mv cf8 /usr/local/bin/cf
+      - name: cf login, push, and wire the live procurement-core URL
+        env:
+          CF_USERNAME: ${{ secrets.CF_USERNAME }}
+          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+        run: |
+          cf api https://api.cf.us10.hana.ondemand.com
+          cf auth "$CF_USERNAME" "$CF_PASSWORD"
+          cf target -o procureiq-${{ inputs.environment }} -s ${{ inputs.environment }}
+          cf push -f manifest.yml
+          CORE_GUID=$(cf app procurement-core-srv --guid)
+          CORE_URL=$(cf curl "/v3/apps/${CORE_GUID}/routes" | jq -r '.resources[0].url')
+          cf set-env api-gateway PROCUREMENT_CORE_URL "https://${CORE_URL}/procurement"
+          cf restage api-gateway

@@ -1,8 +1,18 @@
 # ci-cd
 
-Three parallel CI/CD tracks for `procurement-core`, all real, none of them
-run automatically against the live BTP account yet (build-first,
-deploy-after-review — see `PROJECT_CHARTER.md`'s account strategy).
+Three parallel CI/CD tracks for the whole landscape (five services), all
+real, none of them run automatically against the live BTP account yet
+(build-first, deploy-after-review — see `PROJECT_CHARTER.md`'s account
+strategy). Every track is now organized by **runtime** (Cloud Foundry vs.
+Kyma), not by service — deploying `procurement-core`/`ai-copilot`/
+`api-gateway`/`legacy-erp-gateway` together is one pipeline's job per
+track, `spend-anomaly-detector` (Kyma) is the other, since these are a
+bound landscape (`api-gateway` calls `procurement-core`, which calls
+`legacy-erp-gateway`), not independently-released products. Testing stays
+per-service in every track — that split is real, standard monorepo CI
+practice (a change to one service shouldn't re-run every other service's
+tests), it's specifically *deploying* that benefits from being organized
+by runtime instead.
 
 **The actual pipeline files don't live in this folder** — each CI/CD system
 has its own real, non-negotiable discovery location, and putting the files
@@ -10,8 +20,8 @@ here instead would mean they'd never actually be found and run:
 
 | Track | Real files | Why they live there, not here |
 |---|---|---|
-| **Project Piper (Jenkins)** | `services/procurement-core/.pipeline/config.yml`, `services/procurement-core/Jenkinsfile` | Piper looks for `.pipeline/config.yml` and a `Jenkinsfile` in the repo/branch a Jenkins job is pointed at — that's the app's own repo root (or, in this monorepo, the service's own folder), not a shared top-level `ci-cd/` directory. |
-| **GitHub Actions** | `.github/workflows/procurement-core-ci.yml` | GitHub only discovers workflows in `.github/workflows/` at the repository root — no exceptions, so this can't live in `ci-cd/` either. |
+| **Project Piper (Jenkins)** | `.pipeline/config.yml` (shared), `Jenkinsfile.cf`, `Jenkinsfile.kyma` | Piper looks for `.pipeline/config.yml` and a `Jenkinsfile` in the repo/branch a Jenkins job is pointed at — the repo root here, since two separate Jenkins pipeline jobs point at this one repo with different Script Paths (`Jenkinsfile.cf` / `Jenkinsfile.kyma`), a real, standard Jenkins multibranch feature for running more than one pipeline against one repo. |
+| **GitHub Actions** | `.github/workflows/{procurement-core,ai-copilot,api-gateway,legacy-erp-gateway,spend-anomaly-detector}-ci.yml` (test, per service), `cf-deploy.yml` (deploy, all CF services), `kyma-deploy.yml` (deploy, the Kyma service), `deploy-all.yml` (both, in dependency order, plus `terraform apply` first) | GitHub only discovers workflows in `.github/workflows/` at the repository root — no exceptions, so none of this can live in `ci-cd/` either. |
 | **SAP Continuous Integration and Delivery service** | Configured in the BTP cockpit UI (job editor), *using the same `.pipeline/config.yml`* Piper already reads | This is a managed, UI-configured wrapper around the same Piper engine — there's no separate config file to place anywhere; see `sap-cicd-service/README.md`. |
 
 This folder exists to document the three tracks side by side and explain

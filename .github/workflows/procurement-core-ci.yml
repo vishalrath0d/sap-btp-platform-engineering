@@ -2,9 +2,12 @@ name: procurement-core CI
 
 # GitHub Actions must live at the repo root (.github/workflows/) - GitHub
 # doesn't discover workflows anywhere else, unlike Piper's .pipeline/config.yml
-# which lives with the app it builds. path filter below scopes this
-# workflow to procurement-core changes only, since this is a monorepo with
-# multiple services, each expected to get its own workflow file.
+# which lives with the app it builds. Test and MTA-build stay path-filtered
+# per service (this file scopes to procurement-core changes only) - the
+# standard, real monorepo CI shape. Deploy lives in
+# .github/workflows/cf-deploy.yml instead, one pipeline for the whole
+# Cloud Foundry-bound landscape - see that file's header comment for why
+# deploy doesn't follow the same one-file-per-service split test does.
 
 on:
   push:
@@ -64,42 +67,3 @@ jobs:
           name: procurement-core-mtar
           path: services/procurement-core/mta_archives/*.mtar
           retention-days: 14
-
-  # Deploy is intentionally NOT wired to run automatically yet - this
-  # project's account strategy (PROJECT_CHARTER.md) is build-first,
-  # deploy-after-review. The job below is real and complete, gated behind
-  # a GitHub Environment requiring manual approval, so turning on real
-  # deployment later is a repo-settings change (add the environment's
-  # required reviewers), not a rewrite of this workflow.
-  deploy-dev:
-    needs: build-mta
-    runs-on: ubuntu-latest
-    environment: dev # configure this GitHub Environment with required
-                       # reviewers before this job can ever actually run
-    if: false # remove once ready to deploy for real - see the note above
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: procurement-core-mtar
-          path: .
-
-      - name: Install cf CLI + multiapps plugin
-        run: |
-          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
-          sudo mv cf8 /usr/local/bin/cf
-          cf install-plugin -f multiapps
-
-      - name: cf login
-        env:
-          CF_USERNAME: ${{ secrets.CF_USERNAME }}
-          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
-        run: |
-          cf api https://api.cf.us10.hana.ondemand.com
-          cf auth "$CF_USERNAME" "$CF_PASSWORD"
-          cf target -o procureiq-dev -s dev
-
-      - name: cf deploy
-        run: |
-          cf deploy services/procurement-core/mta_archives/*.mtar \
-            -e services/procurement-core/mtaext-dev.mtaext \
-            --no-confirm
