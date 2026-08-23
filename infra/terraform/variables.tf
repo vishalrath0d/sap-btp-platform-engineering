@@ -51,6 +51,31 @@ variable "kyma_enabled" {
   default     = false
 }
 
+variable "xsuaa_xsappname" {
+  description = <<-EOT
+    The real, dynamically-assigned xsappname (e.g. 'procurement-core!t700023')
+    from procurement-core's own MTA-created XSUAA instance - fetched live via
+    `cf create-service-key` against the real deployed instance (see
+    terraform-apply.yml), not from a separate Terraform-managed XSUAA
+    instance. A second, Terraform-only XSUAA "application" plan instance
+    with the same xsappname genuinely conflicts with the MTA's own one -
+    confirmed live: creating procurement-core-xsuaa failed every time with
+    a broker-side NPE (ScaleOutLandscapeImpl.getEndpoints(), scaleOutLandscape
+    null) for as long as modules/xsuaa's duplicate existed alongside it,
+    and stopped the moment that duplicate was destroyed. Real two-phase
+    apply as a result, restoring what modules/role-collections' own
+    variables.tf already once did before a redesign assumed (wrongly, as
+    it turned out) that a same-xsappname Terraform-managed instance was a
+    safe way to learn this value in one apply: deploy procurement-core
+    first (its own xsuaa instance gets created for real), THEN apply
+    terraform with this variable set to the value that deploy produced.
+    Empty string is tolerated (see modules/role-collections/main.tf) for
+    a genuinely first-ever apply, before any deploy has happened yet.
+  EOT
+  type        = string
+  default     = ""
+}
+
 variable "environment" {
   description = "Which environment this apply targets - drives naming (procureiq-<environment>) and must match the terraform.tfvars file actually being used (environments/<environment>/terraform.tfvars). No default on purpose: forgetting to set this should fail loudly, not silently default to dev."
   type        = string

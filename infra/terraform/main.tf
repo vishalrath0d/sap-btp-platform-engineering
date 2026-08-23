@@ -126,6 +126,25 @@ module "hana_cloud" {
 }
 
 module "xsuaa" {
+  # Gated to 0 (destroys the one this module previously created) - real
+  # conflict found live, not a bug in this module's own code: procurement-
+  # core's MTA declares its OWN XSUAA "application" plan resource
+  # (services/procurement-core/mta.yaml), using the exact same xs-
+  # security.json and therefore the exact same xsappname
+  # ("procurement-core"). A second, Terraform-managed instance under that
+  # same xsappname genuinely conflicts at the broker level - every MTA
+  # deploy attempt failed creating procurement-core-xsuaa with a broker-
+  # side NPE (ScaleOutLandscapeImpl.getEndpoints(), scaleOutLandscape
+  # null) for as long as this module's instance existed alongside it, and
+  # that error stopped the moment the duplicate was destroyed (real,
+  # reproduced live). See infra/terraform/variables.tf's xsuaa_xsappname
+  # description for how modules/role-collections now learns the real
+  # xsappname instead - from the MTA's own instance, not a duplicate.
+  # Module kept whole, not deleted, same convention as modules/kyma-env/
+  # modules/hana-cloud - it's correct Terraform for a subaccount-level
+  # XSUAA instance, just not needed alongside an MTA that creates its own.
+  count = 0
+
   source                = "./modules/xsuaa"
   subaccount_id         = module.subaccount.id
   name_prefix           = "procurement-core-${var.environment}"
@@ -133,13 +152,15 @@ module "xsuaa" {
 }
 
 module "role_collections" {
-  # xsuaa_credentials_json creates an implicit dependency on module.xsuaa
-  # automatically - no explicit depends_on needed, and (unlike the old
-  # xsuaa_xsappname variable this replaced) no manual two-phase apply
-  # either. See modules/role-collections/main.tf.
-  source                 = "./modules/role-collections"
-  subaccount_id          = module.subaccount.id
-  xsuaa_credentials_json = module.xsuaa.credentials
+  # xsuaa_xsappname is a plain, manually-supplied value (real two-phase
+  # apply: deploy procurement-core first, fetch its real xsuaa instance's
+  # xsappname, THEN apply terraform with it set) - see infra/terraform/
+  # variables.tf and modules/xsuaa's own comment above for why the
+  # same-apply, credentials-JSON-from-a-duplicate-instance approach this
+  # replaced was reverted.
+  source          = "./modules/role-collections"
+  subaccount_id   = module.subaccount.id
+  xsuaa_xsappname = var.xsuaa_xsappname
 
   role_collections = [
     { name = "ProcureIQ Requester", description = "Business users who raise Purchase Requisitions", role_template_name = "Requester" },

@@ -37,10 +37,12 @@ env:
   # from here instead.
   TF_VAR_btp_username: ${{ secrets.BTP_USERNAME }}
   TF_VAR_btp_password: ${{ secrets.BTP_PASSWORD }}
-  # No XSUAA_XSAPPNAME secret needed anymore - role_collections now reads
-  # the real xsappname directly from module.xsuaa's own output within the
-  # same apply (see infra/terraform/modules/role-collections/main.tf),
-  # not from a manually-supplied variable requiring a second apply.
+  # TF_VAR_xsuaa_xsappname is set conditionally below, by the "Fetch the
+  # real xsappname" step - real two-phase apply again (see infra/
+  # terraform/variables.tf's xsuaa_xsappname description for why a
+  # same-apply, Terraform-managed-duplicate-instance approach was
+  # reverted: it genuinely conflicted with procurement-core's own
+  # MTA-created XSUAA instance at the broker level, confirmed live).
 
 defaults:
   run:
@@ -72,6 +74,36 @@ jobs:
 
       - name: terraform init
         run: terraform init
+
+      - name: Install cf CLI
+        run: |
+          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
+          sudo mv cf8 /usr/local/bin/cf
+
+      - name: Fetch the real xsappname from procurement-core's own MTA-created XSUAA instance
+        # Real two-phase apply by design (see infra/terraform/variables.tf's
+        # xsuaa_xsappname description). Skips cleanly, leaving
+        # TF_VAR_xsuaa_xsappname unset (modules/role-collections tolerates
+        # the resulting empty string) if procurement-core hasn't been
+        # deployed yet - a genuinely first-ever apply on a fresh account.
+        # Org name hardcoded the same way cf-deploy.yml's own comment
+        # documents (this trial's real, SAP-assigned org, not a name this
+        # project chose) - update alongside that file if it ever changes.
+        env:
+          CF_USERNAME: ${{ secrets.BTP_USERNAME }}
+          CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
+        run: |
+          cf api https://api.cf.us10-001.hana.ondemand.com
+          cf auth "$CF_USERNAME" "$CF_PASSWORD"
+          cf target -o 4cbf0c12trial -s ${{ github.event.inputs.environment }}
+          if cf service procurement-core-xsuaa >/dev/null 2>&1; then
+            cf create-service-key procurement-core-xsuaa terraform-lookup >/dev/null 2>&1 || true
+            XSAPPNAME=$(cf service-key procurement-core-xsuaa terraform-lookup | sed -n '/{/,$p' | jq -r '.credentials.xsappname')
+            echo "Real xsappname: ${XSAPPNAME}"
+            echo "TF_VAR_xsuaa_xsappname=${XSAPPNAME}" >> "$GITHUB_ENV"
+          else
+            echo "procurement-core-xsuaa doesn't exist yet - role_collections will no-op this apply, re-run after deploying procurement-core"
+          fi
 
       - name: terraform apply
         run: terraform apply -auto-approve -input=false -var-file="environments/${{ github.event.inputs.environment }}/terraform.tfvars"

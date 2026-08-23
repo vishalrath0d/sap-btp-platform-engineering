@@ -2,10 +2,10 @@ variable "subaccount_id" {
   type = string
 }
 
-variable "xsuaa_credentials_json" {
-  description = "The raw JSON credentials string from modules/xsuaa's service binding (module.xsuaa.credentials) - this module decodes it internally to read the real xsappname. Passed as a resource ATTRIBUTE (see main.tf), not used in for_each/count - the earlier version of this module gated for_each on a manually-supplied xsappname value, which forced a real two-phase apply (apply, read an output, set a variable, apply again) for no good reason. Attributes CAN depend on values only known after another resource is created in the same apply; for_each/count cannot - this redesign uses the mechanism Terraform actually supports for exactly this pattern."
+variable "xsuaa_xsappname" {
+  description = "The real, dynamically-assigned xsappname from procurement-core's own MTA-created XSUAA instance (e.g. 'procurement-core!t700023') - a plain, manually-supplied value again, not read from a Terraform-managed XSUAA instance's credentials. A same-xsappname Terraform-managed 'application' plan XSUAA instance genuinely conflicts with the MTA's own one at the broker level (real live failure, see infra/terraform/variables.tf's xsuaa_xsappname description) - the credentials-JSON version this replaced was solving a nonexistent problem at the cost of creating a real one. Empty string tolerated for a genuinely first-ever apply."
   type        = string
-  sensitive   = true
+  default     = ""
 }
 
 variable "role_collections" {

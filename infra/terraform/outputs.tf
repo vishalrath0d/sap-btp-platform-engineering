@@ -15,8 +15,9 @@ output "kyma_dashboard_url" {
   description = "null while kyma_enabled = false (module.kyma_env isn't instantiated at all) - see main.tf's comment on that module call."
 }
 
-output "xsuaa_credentials" {
-  value       = module.xsuaa.credentials
-  description = "Contains the real xsappname role_collections needs for its second apply pass."
-  sensitive   = true
-}
+# No xsuaa_credentials output anymore - module.xsuaa is gated to count=0
+# (see main.tf's comment: a same-xsappname duplicate of procurement-
+# core's own MTA-created XSUAA instance genuinely conflicts at the
+# broker level). role_collections now gets the real xsappname from
+# var.xsuaa_xsappname, fetched live from that MTA-created instance via
+# cf create-service-key (see terraform-apply.yml), not from this module.

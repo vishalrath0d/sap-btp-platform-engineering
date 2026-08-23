@@ -23,20 +23,25 @@ locals {
 
   to_create = {
     for rc in var.role_collections : rc.name => rc
-    if !contains(local.existing_names, rc.name)
+    # var.xsuaa_xsappname == "" gates ALL creation, not just this one
+    # rc - a genuinely first-ever apply, before procurement-core has
+    # ever been deployed for real, has no real xsappname to reference
+    # yet. Skipping cleanly here (rather than creating role collections
+    # with an empty role_template_app_id, which the real API would
+    # likely reject or silently misassociate) is the honest version of
+    # the same self-healing-on-second-apply property this module
+    # already had for the XSUAA auto-creation race below - re-running
+    # apply after a real deploy (with xsuaa_xsappname set) picks these
+    # up correctly.
+    if !contains(local.existing_names, rc.name) && var.xsuaa_xsappname != ""
   }
-
-  xsuaa_xsappname = jsondecode(var.xsuaa_credentials_json).xsappname
 }
 
-# Single apply, not two-phase: for_each is gated on `local.to_create`
-# (still effectively fixed at plan time, same reasoning as before - this
-# data source has no depends_on, so it resolves during plan, not deferred
-# to apply) - only role_template_app_id, a resource ATTRIBUTE, depends on
-# modules/xsuaa's credentials, which are only known after that binding is
-# actually created within the same apply. Attributes can depend on
-# apply-time values; for_each/count cannot - the same distinction this
-# module's earlier redesign already relied on.
+# Real two-phase apply now (see infra/terraform/variables.tf's
+# xsuaa_xsappname description for why modules/xsuaa's same-xsappname
+# duplicate approach was reverted) - var.xsuaa_xsappname is a plain
+# input, known at plan time once set, not a same-apply resource
+# attribute dependency the way it briefly was.
 #
 # Known residual edge case, honestly stated rather than hidden (same
 # class of thing infra/terraform/README.md already documents for CF/Kyma
@@ -44,12 +49,13 @@ locals {
 # AND these role collections are BOTH being created for the very first
 # time in the SAME apply, this data source's plan-time snapshot is taken
 # before XSUAA's auto-creation has happened - so the very first apply
-# might still see them as "missing," attempt to create them, and hit the
-# same creationType conflict once. Re-running `terraform apply` a second
-# time resolves it correctly (XSUAA and its auto-created role collections
-# already exist by then, this module's lookup correctly adopts them) -
-# a real, low-severity, self-healing edge case on a genuinely fresh
-# account, not a bug that recurs on every apply.
+# with xsuaa_xsappname set might still see them as "missing," attempt to
+# create them, and hit the same creationType conflict once. Re-running
+# `terraform apply` a second time resolves it correctly (XSUAA and its
+# auto-created role collections already exist by then, this module's
+# lookup correctly adopts them) - a real, low-severity, self-healing
+# edge case on a genuinely fresh account, not a bug that recurs on every
+# apply.
 resource "btp_subaccount_role_collection" "this" {
   for_each = local.to_create
 
@@ -60,7 +66,7 @@ resource "btp_subaccount_role_collection" "this" {
   roles = [
     {
       name                 = each.value.role_template_name
-      role_template_app_id = local.xsuaa_xsappname
+      role_template_app_id = var.xsuaa_xsappname
       role_template_name   = each.value.role_template_name
     }
   ]
