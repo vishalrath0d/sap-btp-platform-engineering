@@ -37,13 +37,27 @@ resource "btp_subaccount_service_instance" "hana_cloud" {
   name                  = "${var.name_prefix}-hana-cloud"
   service_offering_name = "hana-cloud"
   serviceplan_name      = "hana-free"
-  # Real bug hit live: leaving `parameters` unset entirely isn't the same
-  # as "no parameters" to this broker - the create call failed with
-  # "Failed to unmarshal parameters: unexpected end of JSON input", i.e.
-  # it tried to JSON-parse an empty string. An explicit empty object is
-  # the real fix, matching modules/xsuaa always passing `parameters`
-  # rather than omitting it.
-  parameters = "{}"
+  # Real bugs hit live, in order:
+  # 1) leaving `parameters` unset entirely isn't "no parameters" to this
+  #    broker - failed with "unexpected end of JSON input" (empty string
+  #    reaching the broker, not valid-but-empty JSON).
+  # 2) an explicit "{}" hit the SAME error - confirmed via a direct
+  #    `cf create-service hana-cloud hana-free ...` with no -c at all
+  #    (bypassing Terraform entirely) that this is a genuine broker
+  #    requirement, not a provider serialization quirk.
+  # The real minimal shape came from the plan's own published create
+  # schema (`cf curl /v3/service_plans/<guid>` -> .schemas.
+  # service_instance.create.parameters, queried live, not guessed):
+  # top-level requires "data"; data.required = ["edition", "memory"];
+  # for the hana-free plan specifically, data.memory has minimum=maximum
+  # =16 (fixed 16GB, no scaling on this plan) and data.edition's enum is
+  # ["cloud", "orange"], default "cloud".
+  parameters = jsonencode({
+    data = {
+      memory  = 16
+      edition = "cloud"
+    }
+  })
 
   timeouts = {
     # Real HANA Cloud provisioning is slow (tens of minutes, not seconds
