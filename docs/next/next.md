@@ -39,12 +39,24 @@ f571df734c28`, Subaccount ID `e40cb8d7-82ad-4851-a323-12751a62402e`, and
 administrator emails) and reviewed "on a case-by-case basis within one
 month." See `infra/terraform/modules/kyma-env/main.tf`'s own comment and
 `infra/terraform/README.md`'s Known limitations for the full story.
-**Next concrete step**: send that email (or open the `BC-CP-XF-KYMA`
-support ticket) - the sooner it's sent, the sooner the up-to-a-month clock
-starts. Everything else (CF, XSUAA, role collections, all 5 entitlements)
-is fully live-verified and completely unaffected by this - only the Kyma
-cluster itself, and by extension `spend-anomaly-detector`'s real deployed
-testing, waits on SAP's approval.
+**Request sent** - the email above went out. Everything else (CF, XSUAA,
+role collections, all 5 entitlements) is fully live-verified and
+completely unaffected by this.
+
+**While waiting, `spend-anomaly-detector` moved to Cloud Foundry
+temporarily** - `manifest.yml` added, wired into `cf-deploy.yml`/
+`Jenkinsfile.cf` alongside the other four CF services (now five), plus a
+new `wire-procurement-core-outbound-urls` step/stage setting
+`SPEND_ANOMALY_DETECTOR_URL`/`LEGACY_SUPPLIER_ERP_URL` on the real
+deployed `procurement-core-srv` route (closes a related pre-existing gap:
+`legacy-erp-gateway`'s URL was never wired for a real CF deploy either,
+fixed at the same time). `module.kyma_env` in `infra/terraform` is now
+gated behind a `kyma_enabled` variable (default `false`) - the module and
+all `k8s/`/Kyma workflow files are completely untouched, just not
+instantiated/used right now. **Once SAP approves**: flip `kyma_enabled =
+true` in `environments/dev/terraform.tfvars`, apply, then switch
+`spend-anomaly-detector`'s real deploy target back to `kyma-deploy.yml` -
+nothing else needs to change.
 
 ### Session 9 — CI/CD restructuring (direct feedback, not a redesign from scratch)
 

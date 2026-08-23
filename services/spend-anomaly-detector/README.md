@@ -6,6 +6,18 @@ totals, and outlier line-item pricing — and records an explainable,
 rule-by-rule review. Designed to run on **Kyma**, subscribing to a
 `PurchaseOrderCreated` event; runs as a plain HTTP webhook receiver locally.
 
+**Currently deployed to Cloud Foundry temporarily** (`manifest.yml`, via
+`cf-deploy.yml`), not Kyma — this trial account has no self-service Kyma
+provisioning at all (confirmed live, twice over), and a trial Kyma cluster
+request is pending SAP's approval (see `infra/terraform/modules/kyma-env/
+main.tf` and `docs/next/next.md`). The app itself is unchanged either way;
+what's genuinely missing on CF is the gateway-level JWT auth the real Kyma
+path enforces via `APIRule` against the XSUAA instance in `k8s/` — this
+service's webhook is open/unauthenticated on CF, the same posture it
+already has in local Docker Compose testing. The `k8s/` manifests and
+`kyma-deploy.yml`/`piper-kyma-deploy.yml` are untouched and become the
+real deploy path again the moment SAP approves the request.
+
 ## Why HTTP locally, not a real event broker
 
 Production topology: `procurement-core` (Cloud Foundry) publishes

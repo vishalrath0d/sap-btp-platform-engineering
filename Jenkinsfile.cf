@@ -1,14 +1,17 @@
-// Project "Piper" pipeline for the whole Cloud Foundry-bound landscape
-// (procurement-core, ai-copilot, api-gateway, legacy-erp-gateway) - one
+// Project "Piper" pipeline for the whole Cloud Foundry-bound landscape -
+// now five services, not four: spend-anomaly-detector moved here
+// temporarily (see its own manifest.yml's comment, and .github/workflows/
+// cf-deploy.yml's identical addition) while its real target, Kyma, is
+// blocked on SAP's trial-approval process (docs/next/next.md). One
 // pipeline, not one per service, same reasoning as
-// .github/workflows/cf-deploy.yml: these four are a bound landscape, not
-// four independently-released products, so deploying them is one
+// .github/workflows/cf-deploy.yml: these five are a bound landscape, not
+// five independently-released products, so deploying them is one
 // pipeline's job even though testing each stays its own concern.
 //
 // Explicit scripted stages, not the implicit `piperPipeline script: this`
 // form alone would drive - a deliberate choice, not a style preference:
-// this pipeline calls cloudFoundryDeploy FOUR times with three different
-// parameter sets (one MTA deploy via mtaDeployPlugin, three cf_native
+// this pipeline calls cloudFoundryDeploy FIVE times with three different
+// parameter sets (one MTA deploy via mtaDeployPlugin, four cf_native
 // pushes against different manifests) - the implicit form applies one
 // global parameter set per step name from config.yml, which can't express
 // "call this step four times, differently" on its own. This project's own
@@ -64,6 +67,10 @@ pipeline {
                     when { changeset "services/legacy-erp-gateway/**" }
                     steps { dir('services/legacy-erp-gateway') { sh 'npm ci && npm test' } }
                 }
+                stage('spend-anomaly-detector') {
+                    when { changeset "services/spend-anomaly-detector/**" }
+                    steps { dir('services/spend-anomaly-detector') { sh 'npm ci && npm test' } }
+                }
             }
         }
 
@@ -104,13 +111,18 @@ pipeline {
             }
         }
 
-        stage('Deploy - ai-copilot, api-gateway, legacy-erp-gateway (cf_native)') {
+        stage('Deploy - ai-copilot, legacy-erp-gateway, spend-anomaly-detector, api-gateway (cf_native)') {
             when { expression { false } }
             steps {
                 dir('services/ai-copilot') {
                     cloudFoundryDeploy script: this, deployTool: 'cf_native', deployType: 'standard', cloudFoundry: cfTarget
                 }
                 dir('services/legacy-erp-gateway') {
+                    cloudFoundryDeploy script: this, deployTool: 'cf_native', deployType: 'standard', cloudFoundry: cfTarget
+                }
+                dir('services/spend-anomaly-detector') {
+                    // Temporary CF home - see manifest.yml's comment.
+                    // Same shape as ai-copilot/legacy-erp-gateway above.
                     cloudFoundryDeploy script: this, deployTool: 'cf_native', deployType: 'standard', cloudFoundry: cfTarget
                 }
                 dir('services/api-gateway') {
@@ -124,6 +136,26 @@ pipeline {
                         cf restage api-gateway
                     '''
                 }
+            }
+        }
+
+        stage('Wire procurement-core outbound URLs') {
+            // Same reverse-direction wiring cf-deploy.yml's dedicated job
+            // does - procurement-core calls OUT to legacy-erp-gateway and
+            // spend-anomaly-detector (srv/lib/destination.js,
+            // srv/lib/events.js), both need their real deployed routes.
+            when { expression { false } }
+            steps {
+                sh '''
+                    ANOMALY_GUID=$(cf app spend-anomaly-detector --guid)
+                    ANOMALY_URL=$(cf curl "/v3/apps/${ANOMALY_GUID}/routes" | jq -r '.resources[0].url')
+                    LEGACY_GUID=$(cf app legacy-erp-gateway --guid)
+                    LEGACY_URL=$(cf curl "/v3/apps/${LEGACY_GUID}/routes" | jq -r '.resources[0].url')
+
+                    cf set-env procurement-core-srv SPEND_ANOMALY_DETECTOR_URL "https://${ANOMALY_URL}/events/purchase-order-created"
+                    cf set-env procurement-core-srv LEGACY_SUPPLIER_ERP_URL "https://${LEGACY_URL}"
+                    cf restage procurement-core-srv
+                '''
             }
         }
     }

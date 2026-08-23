@@ -19,6 +19,13 @@ name: piper kyma deploy (GitHub Actions, real Piper binary)
 # dockerConfigJSON) are sourced from Jenkins's own kanikoExecute call in
 # Jenkinsfile.kyma and project-piper.io's docs, not yet live-verified -
 # same honesty level as piper-cf-deploy.yml.
+#
+# Currently NOT usable, kept whole on purpose - same reason
+# kyma-deploy.yml states: this trial account has no self-service Kyma
+# provisioning at all, a request is pending SAP's approval (see
+# infra/terraform/modules/kyma-env/main.tf, docs/next/next.md).
+# spend-anomaly-detector deploys to Cloud Foundry temporarily instead
+# (cf-deploy.yml) while that's pending.
 
 on:
   workflow_call:

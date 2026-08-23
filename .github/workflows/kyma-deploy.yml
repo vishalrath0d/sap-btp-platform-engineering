@@ -11,6 +11,18 @@ name: kyma deploy (all Kyma-bound services)
 # different tooling (cf CLI vs kubectl + BTP Operator), so keeping that
 # split visible as two files (not one, not five) mirrors the actual
 # architecture rather than an arbitrary file-per-service convention.
+#
+# Currently NOT usable, kept whole on purpose, not deleted: this trial
+# account has no self-service Kyma provisioning at all (confirmed twice
+# over - see infra/terraform/modules/kyma-env/main.tf's comment and
+# docs/next/next.md) - a trial Kyma request has been sent to SAP and is
+# pending approval (up to a month). spend-anomaly-detector is deployed to
+# Cloud Foundry temporarily instead (see cf-deploy.yml and its own
+# manifest.yml's comment) while that's pending. This file and its k8s/
+# manifests are the real target architecture, ready to use the moment
+# SAP approves the request - nothing here needs to change then, only
+# infra/terraform/environments/dev/terraform.tfvars's `kyma_enabled`
+# flips to true and this workflow becomes the real deploy path again.
 
 on:
   workflow_dispatch:

@@ -74,7 +74,20 @@ module "cloudfoundry_env" {
 }
 
 module "kyma_env" {
-  # See cloudfoundry_env's comment above - same reasoning, same fix.
+  # Gated on var.kyma_enabled (default false) - kept whole, not deleted
+  # or commented out: this trial account genuinely has no self-service
+  # Kyma provisioning (confirmed twice over, see modules/kyma-env/
+  # main.tf's own comment and docs/next/next.md) - a request has been
+  # sent to SAP and is pending approval (up to a month). Every apply
+  # would otherwise fail on this one resource for a reason no retry
+  # fixes, blocking the whole apply over one thing that isn't ready yet.
+  # `count`, not the module going away, so flipping kyma_enabled back to
+  # true later (in environments/<env>/terraform.tfvars) needs no further
+  # code change - the module itself was never touched. Module-level
+  # count is real, standard Terraform (1.x+), same mechanism this
+  # project's other adaptive modules already use internally.
+  count = var.kyma_enabled ? 1 : 0
+
   source         = "./modules/kyma-env"
   subaccount_id  = module.subaccount.id
   name           = "procureiq-kyma-${var.environment}"

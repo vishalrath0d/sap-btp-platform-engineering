@@ -5,6 +5,11 @@ name: deploy
 # run to just the CF track, just Kyma, or either one's real-Piper-CLI
 # alternate mechanism instead.
 #
+# `kyma`/`piper-kyma` are currently not usable (no self-service Kyma on
+# this trial - see kyma-deploy.yml's own comment) - `cf`/`piper-cf` is
+# the real path right now, spend-anomaly-detector included (moved there
+# temporarily, see cf-deploy.yml).
+#
 # terraform apply is deliberately NOT a step in this file - see
 # infra/terraform's own terraform-apply.yml instead, and the mapping
 # below for why these are two separate lifecycles, not one:
