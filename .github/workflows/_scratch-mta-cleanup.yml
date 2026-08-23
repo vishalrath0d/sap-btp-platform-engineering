@@ -32,5 +32,7 @@ jobs:
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
           cf target -o 4cbf0c12trial -s dev
           cf undeploy procurement-core --delete-services -f || true
+          echo "=== deleting leftover scratch-hana-check diagnostic instance ==="
+          cf delete-service scratch-hana-check -f || true
           echo "=== remaining services in dev ==="
           cf services
