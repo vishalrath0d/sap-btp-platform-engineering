@@ -4,8 +4,8 @@ Piper isn't Jenkins-only. Its real steps (`mtaBuild`, `cloudFoundryDeploy`,
 `kanikoExecute`, ...) are implemented once, in Go, and shipped two ways:
 the `piper-lib-os` Jenkins shared library (this page, `Jenkinsfile.cf`/
 `Jenkinsfile.kyma`), and a standalone Go binary anyone can run from any
-CI system — including GitHub Actions, via
-`.github/workflows/piper-cf-deploy.yml` (see `ci-cd/github-actions/
+CI system — including GitHub Actions, via `.github/workflows/
+piper-cf-deploy.yml` and `piper-kyma-deploy.yml` (see `ci-cd/github-actions/
 README.md`'s "Is Project Piper still real..." section for the full
 Jenkins-vs-GitHub-Actions story, and why `project-piper-action`, SAP's
 old GitHub Actions *wrapper*, is deprecated but the binary itself isn't).
@@ -61,15 +61,25 @@ project, not written from memory.
 
 ## The GitHub Actions track
 
-`.github/workflows/piper-cf-deploy.yml` — installs the real `piper`
-binary (`wget https://github.com/SAP/jenkins-library/releases/latest/
-download/piper`, confirmed real and current) and calls `piper mtaBuild` /
-`piper cloudFoundryDeploy` directly as CLI subcommands, scoped to
-`procurement-core`/CF only (matching `Jenkinsfile.cf`'s own scope - no
-Kyma-via-Piper-on-GitHub-Actions path, `kyma-deploy.yml` already covers
-Kyma via plain `kubectl` for the same reasoning `Jenkinsfile.kyma` gives).
-Its CLI flag names are sourced from `piper mtaBuild --help`/
-`cloudFoundryDeploy --help` and project-piper.io's docs, not yet
+Full parity with the Jenkins track now — a real Piper path for both
+runtimes, not just CF:
+
+- **`.github/workflows/piper-cf-deploy.yml`** — installs the real `piper`
+  binary (`wget https://github.com/SAP/jenkins-library/releases/latest/
+  download/piper`, confirmed real and current) and calls `piper mtaBuild` /
+  `piper cloudFoundryDeploy` directly as CLI subcommands, mirroring
+  `Jenkinsfile.cf`'s steps.
+- **`.github/workflows/piper-kyma-deploy.yml`** — same real binary, calls
+  `piper kanikoExecute` for the image build+push (the same Go step
+  `Jenkinsfile.kyma`'s `kanikoExecute` call invokes), then plain
+  `kubectl`/`envsubst` for the BTP Operator + `APIRule` sequence, exactly
+  mirroring `Jenkinsfile.kyma`'s own split and its own reasoning for why
+  that sequence isn't a single Piper step.
+
+Both are wired into `deploy.yml`'s `target` input (`piper-cf`/
+`piper-kyma`) as alternate mechanisms to the plain-CLI `cf`/`kyma`
+targets, not additional runs alongside them. Their CLI flag names are
+sourced from `piper <step> --help` and project-piper.io's docs, not yet
 confirmed against a live run (no Jenkins/Piper-CLI execution has happened
 in this project so far) — flagged the same way this project flags every
 not-yet-live-verified piece, not asserted with false confidence.
@@ -82,7 +92,7 @@ not-yet-live-verified piece, not asserted with false confidence.
 - Both Jenkinsfiles' deploy stages are gated behind `when { expression {
   false } }` — this project's Groovy equivalent of every GitHub Actions
   workflow's `if: false`, same build-first, deploy-after-review posture.
-- `piper-cf-deploy.yml`'s CLI invocation hasn't been run live yet either -
-  see "The GitHub Actions track" above.
+- Neither `piper-cf-deploy.yml`'s nor `piper-kyma-deploy.yml`'s CLI
+  invocations have been run live yet - see "The GitHub Actions track" above.
 - `tmsUpload` (Cloud Transport Management promotion) is commented out in
   `.pipeline/config.yml` — see `transport/cloud-transport-management`.

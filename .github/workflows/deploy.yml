@@ -2,8 +2,8 @@ name: deploy
 
 # Renamed from deploy-all.yml - "all" implied it always deploys
 # everything, which is no longer true now that `target` lets you scope a
-# run to just the CF track, just Kyma, or the Piper-CLI showcase path
-# instead.
+# run to just the CF track, just Kyma, or either one's real-Piper-CLI
+# alternate mechanism instead.
 #
 # terraform apply is deliberately NOT a step in this file - see
 # infra/terraform's own terraform-apply.yml instead, and the mapping
@@ -57,7 +57,8 @@ on:
           - all # cf-deploy.yml + kyma-deploy.yml (the two primary, plain-CLI paths)
           - cf # cf-deploy.yml only
           - kyma # kyma-deploy.yml only
-          - piper-cf # piper-cf-deploy.yml - the real Piper-CLI path, CF only, an alternate mechanism to `cf`, not run alongside it
+          - piper-cf # piper-cf-deploy.yml - the real Piper-CLI path for the CF track, an alternate mechanism to `cf`, not run alongside it
+          - piper-kyma # piper-kyma-deploy.yml - the real Piper-CLI path for the Kyma track, an alternate mechanism to `kyma`, not run alongside it
       confirm:
         description: 'Type "deploy" to confirm you intend to run this against the real BTP account'
         required: true
@@ -100,3 +101,12 @@ jobs:
     secrets:
       CF_USERNAME: ${{ secrets.CF_USERNAME }}
       CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
+
+  piper-kyma-deploy:
+    needs: verify-confirmation
+    if: inputs.target == 'piper-kyma'
+    uses: ./.github/workflows/piper-kyma-deploy.yml
+    with:
+      environment: ${{ inputs.environment }}
+    secrets:
+      KYMA_KUBECONFIG: ${{ secrets.KYMA_KUBECONFIG }}

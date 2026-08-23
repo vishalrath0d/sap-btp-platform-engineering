@@ -21,8 +21,8 @@ deploying right now.
 ## Deploy — one file, routes to the right mechanism
 
 **`deploy.yml`** — a single `workflow_dispatch` with a `target` choice
-input (`all` / `cf` / `kyma` / `piper-cf`) that routes to the right
-reusable workflow instead of always running everything:
+input (`all` / `cf` / `kyma` / `piper-cf` / `piper-kyma`) that routes to
+the right reusable workflow instead of always running everything:
 
 - **`cf-deploy.yml`** — all four Cloud Foundry-bound services (plain `cf`
   CLI), in dependency order (`api-gateway` last, since it needs
@@ -32,12 +32,18 @@ reusable workflow instead of always running everything:
 - **`piper-cf-deploy.yml`** — the same CF deploy as `cf-deploy.yml`, but
   through the real **Piper CLI binary** instead of plain `cf`/`mbt`
   commands — see "Is Piper still real, and is it Jenkins-only?" below.
-  An alternate *mechanism* for the same CF target, not a fifth thing that
-  runs alongside the others — choosing `piper-cf` runs instead of `cf`,
-  not in addition to it.
+- **`piper-kyma-deploy.yml`** — the same Kyma deploy as `kyma-deploy.yml`,
+  but the image build uses `piper kanikoExecute` (the real Piper CLI)
+  instead of `docker/build-push-action`.
+
+Each Piper file is an alternate *mechanism* for the same runtime target,
+not a fifth/sixth thing that runs alongside the others — choosing
+`piper-cf` runs instead of `cf`, not in addition to it (same for
+`piper-kyma`/`kyma`).
 
 `target: all` runs `cf-deploy.yml` + `kyma-deploy.yml` (the two primary,
-plain-CLI paths) — `piper-cf` is always an explicit, separate choice.
+plain-CLI paths, covering the whole landscape) — either Piper path is
+always an explicit, separate choice, never bundled into `all`.
 
 **`terraform apply` is not a step in `deploy.yml`.** It has its own
 standalone workflow, `infra/terraform`'s `terraform-apply.yml` — see that
@@ -73,16 +79,20 @@ runnable from anywhere a CI runner can execute a binary — GitHub Actions
 included. What's genuinely **deprecated** is `project-piper-action`, SAP's
 old GitHub Actions *wrapper* around that binary — archived upstream, which
 is why `cf-deploy.yml`/`kyma-deploy.yml` call `mbt`/`cf`/`kubectl`
-directly rather than trying to run Piper steps through it. `piper-cf-deploy.yml`
-is the credible current replacement: install the real binary, call its
-subcommands (`piper mtaBuild`, `piper cloudFoundryDeploy`) directly as
-CLI flags — genuinely running Piper, from GitHub Actions, post-deprecation.
+directly rather than trying to run Piper steps through it.
+`piper-cf-deploy.yml`/`piper-kyma-deploy.yml` are the credible current
+replacement: install the real binary, call its subcommands (`piper
+mtaBuild`, `piper cloudFoundryDeploy`, `piper kanikoExecute`) directly as
+CLI flags — genuinely running Piper, from GitHub Actions, post-deprecation,
+one file per runtime, mirroring `Jenkinsfile.cf`/`Jenkinsfile.kyma`'s own
+split on the Jenkins side.
 
 ## Secrets these need before any deploy workflow can run for real
 
 `CF_USERNAME`/`CF_PASSWORD` (Cloud Foundry — used by both `cf-deploy.yml`
 and `piper-cf-deploy.yml`), `KYMA_KUBECONFIG` (base64-encoded kubeconfig
-for the Kyma cluster), plus the four Terraform secrets
+for the Kyma cluster — used by both `kyma-deploy.yml` and
+`piper-kyma-deploy.yml`), plus the four Terraform secrets
 `terraform-apply.yml`/`terraform-plan.yml` need (see
 `infra/terraform/README.md`) — none present in this repo, none needed
 until deployment is actually turned on.
