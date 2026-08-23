@@ -6,6 +6,7 @@ const { nextNumber } = require('./lib/sequence');
 const { publishPurchaseOrderCreated } = require('./lib/events');
 const { getDestination } = require('./lib/destination');
 const { mapLegacySupplier } = require('./lib/legacy-supplier-mapper');
+const metrics = require('./lib/metrics');
 
 module.exports = cds.service.impl(async function () {
   const {
@@ -58,6 +59,7 @@ module.exports = cds.service.impl(async function () {
       status: 'PENDING',
     });
 
+    metrics.requisitionsSubmittedTotal.inc();
     return SELECT.one.from(PurchaseRequisitions, id);
   });
 
@@ -114,6 +116,8 @@ module.exports = cds.service.impl(async function () {
     );
 
     await UPDATE(PurchaseRequisitions, id).with({ status: 'CONVERTED', purchaseOrder_ID: poId });
+    metrics.requisitionsApprovedTotal.inc();
+    metrics.purchaseOrdersCreatedTotal.inc();
 
     // Publish for spend-anomaly-detector — see srv/lib/events.js for why
     // this never blocks or fails the approve() transaction above it.
@@ -161,6 +165,7 @@ module.exports = cds.service.impl(async function () {
     }
 
     await UPDATE(PurchaseRequisitions, id).with({ status: 'REJECTED' });
+    metrics.requisitionsRejectedTotal.inc();
 
     return SELECT.one.from(PurchaseRequisitions, id);
   });

@@ -1,0 +1,106 @@
+{
+  "title": "ProcureIQ Overview",
+  "uid": "procureiq-overview",
+  "schemaVersion": 39,
+  "version": 1,
+  "editable": true,
+  "timezone": "browser",
+  "time": { "from": "now-1h", "to": "now" },
+  "refresh": "10s",
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP request rate, by service",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "unit": "reqps" }, "overrides": [] },
+      "targets": [
+        { "expr": "sum(rate(procurement_http_requests_total[5m]))", "legendFormat": "procurement-core", "refId": "A" },
+        { "expr": "sum(rate(gateway_http_requests_total[5m]))", "legendFormat": "api-gateway", "refId": "B" },
+        { "expr": "sum(rate(anomaly_http_requests_total[5m]))", "legendFormat": "spend-anomaly-detector", "refId": "C" },
+        { "expr": "sum(rate(legacy_http_requests_total[5m]))", "legendFormat": "legacy-erp-gateway", "refId": "D" },
+        { "expr": "sum(rate(copilot_http_requests_total[5m]))", "legendFormat": "ai-copilot", "refId": "E" }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "P95 request latency, by service",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": "Prometheus",
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [
+        { "expr": "histogram_quantile(0.95, sum(rate(procurement_http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "procurement-core", "refId": "A" },
+        { "expr": "histogram_quantile(0.95, sum(rate(gateway_http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "api-gateway", "refId": "B" },
+        { "expr": "histogram_quantile(0.95, sum(rate(anomaly_http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "spend-anomaly-detector", "refId": "C" },
+        { "expr": "histogram_quantile(0.95, sum(rate(legacy_http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "legacy-erp-gateway", "refId": "D" },
+        { "expr": "histogram_quantile(0.95, sum(rate(copilot_http_request_duration_seconds_bucket[5m])) by (le))", "legendFormat": "ai-copilot", "refId": "E" }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Requisition lifecycle (procurement-core)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": "Prometheus",
+      "description": "Watch for a stuck approval queue: submitted climbing while approved stays flat.",
+      "targets": [
+        { "expr": "procurement_requisitions_submitted_total", "legendFormat": "submitted", "refId": "A" },
+        { "expr": "procurement_requisitions_approved_total", "legendFormat": "approved", "refId": "B" },
+        { "expr": "procurement_requisitions_rejected_total", "legendFormat": "rejected", "refId": "C" },
+        { "expr": "procurement_purchase_orders_created_total", "legendFormat": "POs created", "refId": "D" }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "PO anomaly reviews, by severity",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": "Prometheus",
+      "description": "A real production alert would fire on a sudden spike in HIGH-severity reviews, not on request count.",
+      "targets": [
+        { "expr": "sum(anomaly_reviews_total) by (severity)", "legendFormat": "{{severity}}", "refId": "A" }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Gateway: rate limit exceeded (5m rate)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "rate(gateway_rate_limit_exceeded_total[5m])", "legendFormat": "429s/sec", "refId": "A" }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Gateway: active API keys",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "datasource": "Prometheus",
+      "targets": [
+        { "expr": "gateway_active_api_keys", "refId": "A" }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "ai-copilot: Ollama reachable",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "datasource": "Prometheus",
+      "description": "1 = reachable, 0 = degraded (last /copilot/health check) - see README's Ollama-vs-AI-Core note for why this is a local-only signal, not something a real deployed landscape reports.",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "DEGRADED", "color": "red" }, "1": { "text": "OK", "color": "green" } } }
+          ]
+        },
+        "overrides": []
+      },
+      "targets": [
+        { "expr": "copilot_ollama_reachable", "refId": "A" }
+      ]
+    }
+  ]
+}

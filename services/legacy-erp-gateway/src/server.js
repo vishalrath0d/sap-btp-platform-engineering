@@ -3,6 +3,7 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
+const metrics = require('./metrics');
 
 const SUPPLIERS = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'data', 'suppliers.json'), 'utf8'));
 const PORT = process.env.PORT || 4007;
@@ -17,8 +18,10 @@ const PORT = process.env.PORT || 4007;
  */
 function createApp() {
   const app = express();
+  app.use(metrics.httpMiddleware);
 
   app.get('/health', (req, res) => res.json({ status: 'ok', recordCount: SUPPLIERS.length }));
+  app.get('/metrics', metrics.handler);
 
   app.get('/legacy/suppliers', (req, res) => {
     res.json(SUPPLIERS);

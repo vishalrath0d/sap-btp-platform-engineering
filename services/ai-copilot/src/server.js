@@ -6,13 +6,16 @@ const ollama = require('./ollama-client');
 const tracer = require('./tracer');
 const ragService = require('./rag-service');
 const { VectorStore } = require('./vector-store');
+const metrics = require('./metrics');
 
 function createApp(vectorStore) {
   const app = express();
+  app.use(metrics.httpMiddleware);
   app.use(express.json());
 
   app.get('/copilot/health', async (req, res) => {
     const ollamaUp = await ollama.isReachable();
+    metrics.ollamaReachable.set(ollamaUp ? 1 : 0);
     res.json({
       status: ollamaUp ? 'ok' : 'degraded',
       ollamaReachable: ollamaUp,
@@ -22,11 +25,15 @@ function createApp(vectorStore) {
     });
   });
 
+  app.get('/metrics', metrics.handler);
+
   app.post('/copilot/ask', async (req, res) => {
     try {
       const result = await ragService.ask(vectorStore, req.body?.question);
+      metrics.questionsTotal.inc({ status: 'ok' });
       res.json(result);
     } catch (err) {
+      metrics.questionsTotal.inc({ status: 'error' });
       res.status(err.status || 500).json({ error: err.message });
     }
   });

@@ -44,6 +44,11 @@ flowchart TB
         Ollama["ollama : 11434\nlocal model runtime\n(profile: ai, optional)"]
     end
 
+    subgraph Monitoring["Monitoring"]
+        Prom["prometheus : 9090\nscrapes every /metrics, 15s"]
+        Grafana["grafana : 3000\npre-provisioned 'ProcureIQ Overview' dashboard"]
+    end
+
     Browser -->|"/$fiori-preview"| Core4
     Browser -->|"direct calls"| ApiGw
     Curl -->|"X-API-Key"| ApiGw
@@ -53,6 +58,13 @@ flowchart TB
     Core4 -.->|"PurchaseOrderCreated event,\nfire-and-forget"| Anomaly
 
     Copilot -->|"embeddings + chat"| Ollama
+
+    Prom -.->|"GET /metrics"| Core4
+    Prom -.->|"GET /metrics"| ApiGw
+    Prom -.->|"GET /metrics"| Anomaly
+    Prom -.->|"GET /metrics"| Legacy
+    Prom -.->|"GET /metrics"| Copilot
+    Grafana -->|"PromQL"| Prom
 
     classDef btp stroke-dasharray: 4 3
     class Core4,ApiGw,Anomaly,Legacy,Copilot btp
@@ -130,9 +142,12 @@ Every service is plain Node/Express (`procurement-core` runs CAP's `cds-serve` u
 
 ```bash
 docker compose up --build              # procurement-core, spend-anomaly-detector,
-                                        # legacy-erp-gateway, api-gateway
+                                        # legacy-erp-gateway, api-gateway,
+                                        # prometheus, grafana
 docker compose --profile ai up --build # + ai-copilot (needs Ollama - see below)
 ```
+
+Prometheus and Grafana come up by default (not behind a profile) — they're genuinely lightweight and the whole point is seeing real metrics without an extra command. Open `http://localhost:3000` once everything's healthy; the "ProcureIQ Overview" dashboard is already there.
 
 **Comes up already seeded — no manual setup step, ever:**
 - `procurement-core`'s image runs `cds-deploy` at *build* time (not first-boot), which creates `db.sqlite` and loads every row in `db/data/*.csv` — six tables, real sample requisitions/orders/suppliers, baked into the image itself. A fresh `docker compose up --build` on a machine that has never seen this repo before gets exactly the same data as every other machine that runs it.
@@ -194,6 +209,7 @@ curl -s -u dave:x -X POST http://localhost:4004/procurement/syncLegacySuppliers
 | "Does the system degrade gracefully when a downstream service is down?" | `docker compose stop legacy-erp-gateway`, then retry `syncLegacySuppliers` — a documented, real bug (see [Verified](#verified-a-real-end-to-end-run) below) was found and fixed exactly this way |
 | "What does event-driven spend review actually flag, and why?" | `services/spend-anomaly-detector/README.md` — its rules (`rules.js`), its Feature Flags toggle, its Alert Notification shape |
 | "What does the AI layer actually retrieve, and how is it traced?" | `services/ai-copilot/README.md` — `/copilot/ask`, `/copilot/traces` |
+| "Is anything actually monitored, or is this just logs?" | `http://localhost:3000` (Grafana, pre-provisioned) — real request-rate/latency and domain metrics (requisition lifecycle, PO anomaly severity, gateway rate limiting) sourced from every service's own `/metrics`; see `docs/operations/observability.md` for what's real here vs. what's still BTP-deployment-gated (Cloud ALM, Application Logging, Dynatrace) |
 | "How would this promote across dev/qa/prod for real?" | `infra/terraform/README.md`, `docs/operations/environments.md` |
 
 ## Port map
@@ -206,6 +222,10 @@ curl -s -u dave:x -X POST http://localhost:4004/procurement/syncLegacySuppliers
 | legacy-erp-gateway | http://localhost:4007 | `GET /legacy/suppliers` |
 | ai-copilot | http://localhost:4005 | `POST /copilot/ask`, `GET /copilot/traces` (profile: `ai`) |
 | ollama | http://localhost:11434 | backing model runtime for ai-copilot (profile: `ai`) |
+| prometheus | http://localhost:9090 | scrapes every service's real `/metrics` every 15s |
+| grafana | http://localhost:3000 | pre-provisioned "ProcureIQ Overview" dashboard, no login needed locally (anonymous admin access, local-only convenience) |
+
+Every service also answers `GET /metrics` directly (Prometheus format) — see [Testing and navigating it](#testing-and-navigating-it) and `docs/operations/observability.md` for what's actually wired and verified.
 
 ## Verified: a real end-to-end run
 

@@ -3,6 +3,7 @@
 const fs = require('fs');
 const path = require('path');
 const config = require('./config');
+const metrics = require('./metrics');
 
 /**
  * Simulates publishing to SAP Alert Notification Service (ANS). The real
@@ -34,6 +35,7 @@ function publishAlert({ severity, subject, body, tags = {} }) {
   alerts.push(alert);
   fs.mkdirSync(path.dirname(alertsFile), { recursive: true });
   fs.appendFileSync(alertsFile, JSON.stringify(alert) + '\n');
+  metrics.alertsPublishedTotal.inc();
   return alert;
 }
 
