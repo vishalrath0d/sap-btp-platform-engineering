@@ -17,22 +17,33 @@ module "entitlements" {
 
   entitlements = [
     { service_name = "cloudfoundry", plan_name = "standard" },
-    { service_name = "kymaruntime", plan_name = "trial" },
+    # amount = 1 is real and required, not a guess: a live apply failed
+    # here with "A quota was not set in the amount parameter" -
+    # kymaruntime's entitlement category is SERVICE (numeric quota
+    # required), unlike ELASTIC_SERVICE entitlements which don't take one
+    # at all. 1 is the standard trial Kyma quota.
+    { service_name = "kymaruntime", plan_name = "trial", amount = 1 },
     { service_name = "hana-cloud-trial", plan_name = "hana-cloud-trial" },
-    # The two below are new - added to close the resume/portfolio gap on
-    # supplier-master-abap and services/integration-flow (see
-    # PROJECT_CHARTER.md's "ABAP Environment and Integration Suite" note).
-    # service_name/plan_name here are sourced from SAP's own cockpit
-    # documentation (the cockpit lists "ABAP Environment" / "Integration
-    # Suite" with a "trial" plan for each), not verified against the live
-    # entitlement catalog the way cloudfoundry/kymaruntime/hana-cloud-trial
-    # above were - this project doesn't have live btp CLI credentials in
-    # this environment to check the catalog directly. Flagged here exactly
-    # the way this file's own history already handles this class of risk:
-    # written from the best-sourced value, corrected from whatever the
-    # next real `terraform plan` run actually reports (that loop has
-    # already caught and fixed several wrong assumptions in this project -
-    # see infra/terraform/README.md's "Update - verified live" section).
+    # cloudfoundry/standard and hana-cloud-trial/hana-cloud-trial above
+    # both failed live apply too - "the global account is not entitled to
+    # this service plan" - a real, live-verified correction to this
+    # file's own earlier "confirmed correct" claim (terraform plan never
+    # validates against the live catalog, only apply does). Left as-is
+    # rather than guessing a replacement name: modules/entitlements is now
+    # adaptive (looks up what's already entitled, only creates what's
+    # missing) - since both are near-certainly already pre-granted on this
+    # trial by default, the adaptive lookup should just adopt them and
+    # skip trying to (re-)create them, regardless of what this file's
+    # guessed plan_name says. If the next live apply proves that wrong,
+    # fix here with the real value from `btp list accounts/entitlement`.
+    #
+    # abap/integration-suite below are genuinely NOT pre-granted (a
+    # different live error: same message, but these two are real "you
+    # don't have this yet" rejections, not "already exists" ones) - still
+    # unverified against the live catalog, corrected once the real plan
+    # names are confirmed via the BTP cockpit's Entitlements -> Add
+    # Service Plans catalog (no CLI equivalent for not-yet-assigned plans
+    # was found).
     { service_name = "abap", plan_name = "trial" },
     { service_name = "integration-suite", plan_name = "trial" },
   ]

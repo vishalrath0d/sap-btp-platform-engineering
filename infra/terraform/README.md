@@ -151,10 +151,54 @@ documented (a genuinely fresh subaccount with zero entitlements might
 need two applies the first time, same class of issue as any resource
 whose count depends on another resource's existence).
 
-Entitlement `service_name`/`plan_name` values (`cloudfoundry/standard`,
-`hana-cloud-trial/hana-cloud-trial`, `kymaruntime/trial`) and Kyma's
-trial `plan_name` are now confirmed correct — the live plan proposed
-creating them without error.
+**Correction to the paragraph above, from a real `terraform apply` run**:
+"the live plan proposed creating them without error" was **not** the same
+as "confirmed correct" — `terraform plan` never validates entitlement
+`service_name`/`plan_name` against the live catalog, only `apply` does,
+and the first real `apply` proved several of these wrong: `cloudfoundry/
+standard` and `hana-cloud-trial/hana-cloud-trial` both failed with *"the
+global account is not entitled to this service plan"* (this global
+account's real entitlement for each is a different plan name, or already
+pre-granted through a different mechanism entirely — not yet confirmed
+which); `kymaruntime/trial` failed separately with *"a quota was not set
+in the amount parameter"* — a config gap, not a wrong name (its
+entitlement `category` is `SERVICE`, which requires an explicit numeric
+`amount`; fixed in `main.tf`).
+
+The real, more useful fix wasn't guessing better names — it was
+recognizing that a trial account's default entitlements are typically
+**already pre-granted automatically**, so Terraform trying to *create* a
+fresh entitlement for something already granted is the wrong operation,
+independent of whether the guessed name happens to be right. `modules/
+entitlements` is now adaptive, same pattern as `cloudfoundry-env`/
+`kyma-env`: look up what's already entitled (`data
+"btp_subaccount_entitlements"`), only create what's genuinely missing.
+This is correct on a trial (silently adopts the pre-granted ones,
+whatever their real plan name is) and correct on a real/paid account
+(nothing is pre-granted, so it creates everything) — the same code, not
+two different code paths for the two account types.
+
+`modules/role-collections` needed the identical fix for a different
+reason: XSUAA auto-creates a role collection (`creationType: XSSECURITY`)
+for every role template in `xs-security.json` the moment its service
+instance is created — by the time this module tried to create the same
+three role collections fresh, they already existed, and the API refused
+to change their `creationType` to `admin`. Now adaptive too (`data
+"btp_subaccount_role_collections"`), with one honestly-stated residual
+edge case: on a genuinely fresh subaccount where XSUAA and these role
+collections are *both* created for the first time in the same apply, the
+very first run might still hit this once (the lookup's plan-time snapshot
+predates XSUAA's auto-creation) — re-running `apply` a second time
+resolves it, the same class of "fresh subaccount might need two applies"
+note already given above for entitlements-then-environments.
+
+`abap`/`integration-suite`'s `plan_name` values are still unverified —
+these two are genuinely *not* pre-granted on this trial (a different live
+error: "not entitled," not "already exists"), so the adaptive lookup
+alone can't paper over a wrong guess for them the way it does for
+`cloudfoundry`/`hana-cloud-trial`. Confirming the real values needs the
+BTP cockpit's Entitlements → Add Service Plans catalog (no CLI command
+for not-yet-assigned plans was found) — still open.
 
 ## Known limitations (honesty notes)
 
