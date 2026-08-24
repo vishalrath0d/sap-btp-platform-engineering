@@ -23,3 +23,8 @@ default-env.json
 /infra/terraform/*.auto.tfvars
 alerts.jsonl
 mta_archives/
+
+# Personal career-plan notes (resume updates, referrals, application
+# tracking, LinkedIn/Hashnode post drafts) - explicitly not project
+# documentation, kept local-only per Vishal's own instruction.
+/career-notes/
