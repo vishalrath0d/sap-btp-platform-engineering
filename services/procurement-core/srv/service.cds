@@ -23,7 +23,29 @@ type SyncResult {
  */
 service ProcurementService @(path: '/procurement') {
 
+  // Public reads on purpose (requested explicitly, not a default): this
+  // project's deployed Fiori preview UI (services/procurement-core/
+  // README.md) is meant to be a shareable, cold-open link - a visitor
+  // with no BTP login should see real data immediately. Every mutating
+  // path stays exactly as protected as before: CREATE/UPDATE/DELETE
+  // still need a real authenticated user, not 'any' - only READ is
+  // opened up. @readonly entities have no write surface to restrict at
+  // all, so those just get a plain @requires: 'any' instead of the
+  // more elaborate @restrict form.
+  //
+  // Real bug hit live testing this: once @restrict is added to an
+  // entity, it becomes the EXHAUSTIVE authorization list for that
+  // entity - a bound action's own separate @requires annotation
+  // stopped being consulted at all once PurchaseRequisitions gained a
+  // @restrict block, and every action 403'd even for a correctly-
+  // roled user (confirmed live: alice/Requester got 403 on submit(),
+  // bob/Approver got 403 on approve()). Fixed by folding each action's
+  // requirement into the SAME @restrict list as an explicit grant,
+  // rather than leaving them as separate @requires annotations
+  // alongside it.
+
   @readonly
+  @requires: 'any'
   entity Suppliers as projection on db.Suppliers;
 
   /**
@@ -37,25 +59,34 @@ service ProcurementService @(path: '/procurement') {
   @requires: 'IntegrationAdmin'
   action syncLegacySuppliers() returns SyncResult;
 
+  @restrict: [
+    { grant: 'READ', to: 'any' },
+    { grant: ['CREATE', 'UPDATE', 'DELETE'], to: 'authenticated-user' },
+    { grant: 'submit', to: 'Requester' },
+    { grant: 'approve', to: 'Approver' },
+    { grant: 'rejectRequisition', to: 'Approver' },
+  ]
   entity PurchaseRequisitions as projection on db.PurchaseRequisitions actions {
-    @requires: 'Requester'
     action submit()                  returns PurchaseRequisitions;
-
-    @requires: 'Approver'
     action approve(comment: String)  returns PurchaseRequisitions;
-
-    @requires: 'Approver'
     action rejectRequisition(comment: String) returns PurchaseRequisitions;
   };
 
+  @restrict: [
+    { grant: 'READ', to: 'any' },
+    { grant: ['CREATE', 'UPDATE', 'DELETE'], to: 'authenticated-user' },
+  ]
   entity PurchaseRequisitionItems as projection on db.PurchaseRequisitionItems;
 
   @readonly
+  @requires: 'any'
   entity Approvals as projection on db.Approvals;
 
   @readonly
+  @requires: 'any'
   entity PurchaseOrders as projection on db.PurchaseOrders;
 
   @readonly
+  @requires: 'any'
   entity PurchaseOrderItems as projection on db.PurchaseOrderItems;
 }
