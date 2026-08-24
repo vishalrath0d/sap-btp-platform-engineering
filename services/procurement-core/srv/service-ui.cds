@@ -60,6 +60,34 @@ annotate service.PurchaseRequisitions with @(
 // the list — kept simple (string mapping in service.js) rather than a full
 // value-help/text-association model, which would be overkill here.
 // UI.Criticality values: 1=Negative(red) 2=Critical(orange) 3=Positive(green) 5=Neutral(grey)
+// `=` (a CDS *calculated element*, not the `as`-aliased form this used
+// to be) is the real fix for a genuine bug hit live on the deployed
+// HANA instance: with the old `... as statusCriticality : Integer`
+// form, HANA's generated INSERT for PurchaseRequisitions ended up
+// listing `status` twice ("duplicate column name: STATUS") - the
+// compiler resolved the `status as statusText` alias back to the
+// source column name `status` when building the writable column set
+// for the base table, colliding with the real `status` column already
+// in that same INSERT. SQLite (local dev, this service's own test
+// suite) never exercises this codepath, which is why it wasn't caught
+// before deploying.
+//
+// `virtual` was tried first and is the WRONG fix, worth recording:
+// it does stop the column from ever appearing in INSERT/UPDATE, but it
+// also strips it from READS entirely (confirmed live - a real GET
+// stopped returning statusCriticality/statusText at all once marked
+// virtual), because `virtual` means "no database backing whatsoever,
+// populate via handler code only" - it discards the case/when
+// definition, not just its writability. A CDS *calculated element*
+// (this `=` syntax) is the construct that actually matches what these
+// fields are: computed by a real SQL expression in the generated VIEW
+// (so reads/the Fiori UI's Criticality coloring and status label still
+// work), while being excluded from INSERT/UPDATE automatically because
+// calculated elements are derived, not stored - confirmed against the
+// real generated HANA artifacts (`cds build`): the base
+// sap.procureiq.PurchaseRequisitions.hdbtable has neither column, while
+// ProcurementService.PurchaseRequisitions.hdbview computes both via the
+// same case/when SQL this project always intended.
 extend projection service.PurchaseRequisitions with {
   case status
     when 'DRAFT' then 5
@@ -69,7 +97,14 @@ extend projection service.PurchaseRequisitions with {
     when 'REJECTED' then 1
     else 0
   end as statusCriticality : Integer,
-  status as statusText : String,
+  case status
+    when 'DRAFT' then 'DRAFT'
+    when 'SUBMITTED' then 'SUBMITTED'
+    when 'APPROVED' then 'APPROVED'
+    when 'CONVERTED' then 'CONVERTED'
+    when 'REJECTED' then 'REJECTED'
+    else status
+  end as statusText : String,
 };
 
 annotate service.PurchaseRequisitionItems with @(
