@@ -1,11 +1,93 @@
 # Continuity notes — read this at the start of every session
 
-Last updated: 2026-08-23 (end of session 10 — real terraform apply
-attempts against the live account: found and fixed 3 real entitlement/
-role-collection/state-filter bugs, all 4 wrong entitlement names
-corrected to real values from `btp list accounts/entitlement`, and hit a
-genuine account-level blocker on Kyma — see below, this is the actual
-current blocking item)
+Last updated: 2026-08-24 (end of session 11 — **all 5 services deployed
+and live on the real BTP trial for the first time**; found and fixed 8
+more real, live-only bugs getting there; the previously-unused
+Terraform-managed HANA Cloud + XSUAA instances gated off and destroyed;
+extensive documentation pass — see below)
+
+### Session 11 — first real end-to-end deploy, 8 more real bugs, docs overhaul
+
+**The headline result**: `gh workflow run deploy -f target=cf` now
+succeeds completely — `procurement-core`, `ai-copilot`,
+`legacy-erp-gateway`, `spend-anomaly-detector`, `api-gateway`, and the
+outbound-URL wiring job all green. All 5 apps are live and reachable
+over the public internet right now (see root `README.md`'s "Live on
+BTP" section for the real URLs — they may be stopped by BTP's trial
+auto-stop policy by the time you read this; that section documents how
+to check/restart).
+
+**Every real bug found and fixed to get there, in the order hit** (each
+is documented in more depth at its own real location, cross-referenced
+below — this is the index):
+1. GitHub Actions permissions ceiling blocking the whole `deploy.yml`
+   file's validation (a reusable-workflow call is checked statically
+   against ALL its `uses:` references, even ones the run never
+   touches) — fixed with an explicit `permissions:` block.
+2. Reusable-workflow secrets scoping (`cf-deploy.yml` couldn't see
+   `secrets.BTP_USERNAME` even though it's a real repo secret — a
+   `workflow_call`-triggered workflow only sees secrets it declares).
+3. Hardcoded wrong CF org name (`procureiq-dev` doesn't exist; the real,
+   SAP-assigned org is `4cbf0c12trial`).
+4. Hardcoded wrong CF API endpoint (`api.cf.us10.hana.ondemand.com`
+   authenticates fine but can't see this org; the real endpoint has a
+   `-001` regional-cell suffix). Both 3 and 4 are documented in
+   `infra/terraform/README.md`'s "Known limitations" section.
+5. Invalid `cf deploy` flag (`--no-confirm` isn't real; `-f` is).
+6. `ai-copilot` crashed on every deploy (0/1 instances) — startup
+   eagerly called Ollama (unreachable on CF) and `process.exit(1)`ed
+   before ever binding a port. Fixed to degrade gracefully instead
+   (`services/ai-copilot/src/server.js`'s `main()`), matching the
+   `degraded` status its own `/copilot/health` already reported for
+   post-boot checks.
+7. **HANA Cloud scoping** — Terraform's `btp_subaccount_service_instance`
+   creates a Service-Manager/subaccount-scoped instance, invisible to
+   the CF space's `hana`/`hdi-shared` broker (confirmed via `cf curl`
+   and the cockpit's own Space → Service Instances view — screenshot
+   evidence). Fixed by gating `module.hana_cloud` to `count=0`
+   (destroying the orphaned instance) and creating the real database
+   via `cf create-service`, correctly CF-space-scoped, in
+   `cf-deploy.yml` instead. Full story: `infra/terraform/README.md`'s
+   "HANA Cloud" section.
+8. **XSUAA duplicate conflict** — Terraform's `module.xsuaa` created a
+   second `application`-plan XSUAA instance under the same xsappname as
+   `procurement-core`'s own MTA-created one, causing a broker-side NPE
+   on every deploy attempt. Fixed by gating `module.xsuaa` to `count=0`
+   and reverting `role_collections` to a real two-phase apply (deploy
+   first, fetch the live xsappname via `cf create-service-key`, apply
+   again). Full story: `infra/terraform/README.md`'s "XSUAA" section.
+
+**Documentation overhaul this session** (per explicit request, covering
+several things that had gone stale as the deploy work above landed):
+- `docs/operations/networking-and-request-flow.md` (new) — infra- and
+  code-level request flow, local vs. deployed, including the real XSUAA
+  token flow and HDI container/HANA Cloud relationship diagrams.
+- `docs/operations/btp-cockpit-navigation.md` (new) — screen-by-screen
+  cockpit navigation guide, grounded in real screens visited this
+  session (the HANA/XSUAA "Last Operation Details" screens that
+  diagnosed bugs 7-8 above).
+- `docs/concepts/15-terraform-vs-cockpit.md` (new) — the general
+  Terraform-vs-cockpit concept, linking to the concrete per-module table
+  now in `infra/terraform/README.md`.
+- `infra/terraform/README.md` — major update: real applied status (was
+  "not yet applied"), the corrected XSUAA/HANA Cloud sections above, and
+  the new per-module cockpit-equivalent table.
+- `docs/operations/observability.md` — updated with real, live evidence
+  that every service's `/metrics` endpoint and `cf logs` work against
+  the real deployed apps right now, and an honest note that
+  Prometheus/Grafana scraping of the deployed apps isn't wired yet
+  (local-only for the dashboard layer).
+- Root `README.md` — status line, live URLs, updated architecture/
+  verified sections. (If reading this before that update lands, treat
+  `README.md`'s own content as more current than this summary.)
+
+**Not yet done, worth knowing**: `spend-anomaly-detector` is still
+temporarily on CF (its natural home is Kyma, still blocked on SAP's
+trial approval from session 10 — see `infra/terraform/README.md`'s
+Kyma section, unchanged this session). The rename away from "ProcureIQ"
+(a real company's name) was raised and explicitly deferred by the user
+("let it be, doesn't matter, focus on other things") — not done, and
+not currently planned unless asked again.
 
 ### Session 10 — real `terraform apply`, real bugs found and fixed, one genuine blocker hit
 
@@ -265,21 +347,30 @@ otherwise, not a stopgap.
 
 ## Next steps, in order
 
-1. **HCP Terraform setup** (Vishal's action item) — create the free
-   account/workspace, add it to `versions.tf`, add `TF_API_TOKEN` as a
-   GitHub secret, add `btp_username`/`btp_password` as HCP Terraform
-   workspace variables. Nothing Terraform-related can actually run until
-   this exists.
-2. Once that's done: `terraform-plan.yml` runs automatically on the next
-   PR touching `infra/terraform/**` — review the plan output, especially
-   the flagged-as-unverified entitlement `service_name`/`plan_name`
-   values and Kyma's `plan_name`.
-3. Manually trigger `terraform-apply.yml` only after that review — this
-   is the actual "deploy to BTP" step the user has said to hold until
-   review is complete.
-4. Post-deploy: real XSUAA two-phase apply (`role_collections`), then
-   ABAP Cloud/RAP via Eclipse+ADT, then `services/integration-flow`,
-   then `transport/cloud-transport-management`.
+Infra is applied, all 5 services are deployed and live — this list is
+what's actually left, not "get to a first deploy" anymore:
+
+1. **Once SAP approves the pending Kyma trial request** (session 10 —
+   still pending, see `infra/terraform/README.md`'s Kyma section): flip
+   `kyma_enabled = true` in `environments/dev/terraform.tfvars`,
+   re-apply, then switch `spend-anomaly-detector`'s real deploy target
+   from `cf-deploy.yml` back to `kyma-deploy.yml`/`piper-kyma-deploy.yml`
+   (both already written and untouched, per session 10's notes).
+2. ABAP Cloud/RAP via Eclipse+ADT, then `services/integration-flow`,
+   then `transport/cloud-transport-management` — the entitlements for
+   the first two are already granted and confirmed (session 10); none
+   of the three are blocked on anything from this session.
+3. Wire real Prometheus/Grafana scraping against the deployed BTP apps
+   (or SAP's own Continuous Delivery/Cloud ALM Monitoring) — the
+   `/metrics` endpoints are live and correct today, nothing is scraping
+   them yet. See `docs/operations/observability.md`.
+4. Set up Application Networking (`cf add-network-policy`) for the
+   inter-app calls that currently go over public routes — see
+   `docs/operations/networking-and-request-flow.md`'s "Known
+   limitations" for exactly which calls and why this wasn't done yet.
+5. A genuine end-to-end OAuth2/XSUAA token test against the deployed
+   `procurement-core` (not just CAP's local mocked auth) — see
+   `docs/operations/networking-and-request-flow.md` §3.
 
 ## Known housekeeping
 
@@ -294,6 +385,15 @@ otherwise, not a stopgap.
   as a foundation for code — fine as a reference for real syntax patterns
   (used extensively across sessions 4-5), never as copied source.
 - Do not frame this project around any specific interview/interviewer.
-- **Do not run `terraform apply` (local or via the gated workflow),
-  `cf push`, or `cf deploy` without an explicit go-ahead** — "build it,
-  don't deploy yet, test locally, deploy after review" still stands.
+- **This project is now genuinely live-deployed** — "build it, don't
+  deploy yet" no longer applies as a blanket rule; it did its job
+  through session 10 and was explicitly superseded by real go-aheads in
+  sessions 10-11 (`terraform apply`, `cf push`/`cf deploy` all run for
+  real, repeatedly, against the live account). Still confirm before any
+  *new* category of real-account action (e.g. a first `terraform
+  destroy` of something not already gated to `count=0`, or provisioning
+  a genuinely new paid resource) — the standing caution is about
+  irreversible/costly actions specifically, not deploying at all anymore.
+- Do not rename the project away from "ProcureIQ" unless explicitly
+  asked again — raised this session (it's a real company's name),
+  explicitly deferred by the user ("let it be, doesn't matter").

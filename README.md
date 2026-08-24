@@ -1,21 +1,63 @@
 # SAP BTP Platform Engineering — ProcureIQ
 
-> **Status: local-buildable scope complete — five services, all real, tested, and cross-integrated. Infrastructure written and validated against a live BTP trial subaccount, deploy pending review.** No BTP account is needed to build, run, or test any of the five services below; `infra/terraform` needs a trial subaccount only to actually provision anything, and hasn't been applied yet — see [Infra](./infra/terraform/).
+> **Status: deployed and live on a real SAP BTP trial subaccount.** All five services below run locally with zero BTP account needed (see [Quick start](#quick-start)) — and are *also* actually deployed and reachable right now on Cloud Foundry, real infra provisioned by `infra/terraform`, real bugs found and fixed getting there. See [Live on BTP](#live-on-btp) for the real URLs.
 
 A hands-on, production-grade platform engineering project on **SAP Business Technology Platform**, built around a real SAP extension scenario — procurement (Purchase Requisition → Purchase Order → Supplier → Contract) — and covering the full SAP DevOps toolchain: CAP, ABAP Cloud/RAP, Cloud Foundry + Kyma, HANA Cloud, XSUAA, Terraform, Project Piper, Cloud Transport Management, gCTS, Integration Suite, and an AI copilot layer (SAP AI Core / Generative AI Hub, with a trial-compatible fallback).
 
 Read [`PROJECT_CHARTER.md`](./PROJECT_CHARTER.md) first — it has the why, the scope decisions, and the domain coverage map. [`docs/concepts/00-scope-boundaries.md`](./docs/concepts/00-scope-boundaries.md) is worth reading right after — it states plainly what this project deliberately does *not* cover, and why.
 
 ### Contents
+- [Live on BTP](#live-on-btp)
 - [Architecture](#architecture)
 - [How it all works](#how-it-all-works)
 - [What mirrors what](#what-mirrors-what)
 - [Quick start](#quick-start)
 - [Testing and navigating it](#testing-and-navigating-it)
+- [Deployed on BTP: infra, networking, and navigation](#deployed-on-btp-infra-networking-and-navigation)
+- [Monitoring and observability](#monitoring-and-observability)
 - [Port map](#port-map)
 - [Verified: a real end-to-end run](#verified-a-real-end-to-end-run)
 - [Known limitations](#known-limitations--honesty-notes)
 - [Coverage](#coverage)
+
+## Live on BTP
+
+Real, currently-deployed URLs (org `4cbf0c12trial`, space `dev`) — try
+them directly, no local setup needed:
+
+| Service | URL |
+|---|---|
+| **api-gateway** (start here) | https://api-gateway.cfapps.us10-001.hana.ondemand.com |
+| procurement-core | https://4cbf0c12trial-dev-procurement-core-srv.cfapps.us10-001.hana.ondemand.com |
+| ai-copilot | https://ai-copilot.cfapps.us10-001.hana.ondemand.com |
+| legacy-erp-gateway | https://legacy-erp-gateway.cfapps.us10-001.hana.ondemand.com |
+| spend-anomaly-detector | https://spend-anomaly-detector.cfapps.us10-001.hana.ondemand.com |
+
+```bash
+curl https://api-gateway.cfapps.us10-001.hana.ondemand.com/health
+# -> {"status":"ok"}
+curl https://ai-copilot.cfapps.us10-001.hana.ondemand.com/copilot/health
+# -> {"status":"degraded","ollamaReachable":false,...} - real, expected, see below
+```
+
+**These may return nothing when you try them.** SAP BTP trial accounts
+auto-stop idle Cloud Foundry apps — a real platform behavior, not a bug
+in this project (confirmed live: every app showed `requested state:
+stopped` after a period of inactivity this session). If a URL times out
+or 404s, the app is almost certainly just stopped, not gone — see
+[Deployed on BTP](#deployed-on-btp-infra-networking-and-navigation)
+below for exactly how to check and restart one (`cf start <app>`, or
+the cockpit's own Start button — no CLI needed).
+
+**`ai-copilot` is deliberately "degraded", not broken.** No real AI
+backend is connected on CF — no self-hosted Ollama (that's local-only,
+see [Quick start](#quick-start)), and SAP AI Core / Generative AI Hub
+integration is a documented, not-yet-built follow-up (needs BTP's paid
+free tier, not the plain trial — see `docs/concepts/09-ai-on-btp.md`).
+Health/anomaly-review endpoints work fine; `/copilot/ask` returns an
+error until a real model backend exists. This is the graceful-
+degradation fix documented in [Verified](#verified-a-real-end-to-end-run)
+below, not a limitation being glossed over.
 
 ## Architecture
 
@@ -130,11 +172,11 @@ sequenceDiagram
 |---|---|
 | `procurement-core` | A CAP side-by-side extension of an S/4HANA-style core — Clean Core principle (extend around it, never modify it) |
 | `api-gateway` | SAP API Management / API Business Hub — consumer keys, rate limiting, a discoverable API catalog in front of an OData service |
-| `spend-anomaly-detector` | A Kyma-native, event-driven microservice — subscribes to a `PurchaseOrderCreated` topic on SAP Event Mesh in production; an HTTP webhook stands in locally (see that service's README for exactly why) |
+| `spend-anomaly-detector` | A Kyma-native, event-driven microservice — subscribes to a `PurchaseOrderCreated` topic on SAP Event Mesh in production; an HTTP webhook stands in locally (see that service's README for exactly why). **Deployed to CF temporarily** — its real target, Kyma, is blocked on SAP's trial-approval process, see `infra/terraform/README.md` |
 | `legacy-erp-gateway` + `procurement-core`'s `destination.js` | Cloud Connector + the Destination service — the on-prem connectivity boundary, simulated since there's no real on-prem network segment to tunnel to from a laptop |
 | `ai-copilot` | RAG over enterprise documents via SAP AI Core / Generative AI Hub in production; Ollama stands in locally since AI Core needs BTP's paid free tier, not the plain trial (see [Testing and navigating it](#testing-and-navigating-it) for the exact trial-vs-production split) |
 | `spend-anomaly-detector`'s Feature Flags / Alert Notification / Job Scheduling simulations | SAP Feature Flags service, SAP Alert Notification Service, SAP Job Scheduling Service |
-| `infra/terraform` | A real Terraform-provisioned BTP landing zone — subaccount, entitlements, CF org + Kyma cluster, XSUAA, role collections — via the `SAP/btp` provider |
+| `infra/terraform` | A real Terraform-provisioned BTP landing zone — subaccount, entitlements, CF org + Kyma cluster (gated, pending SAP approval), role collections — via the `SAP/btp` provider. **Applied for real** — see [Deployed on BTP](#deployed-on-btp-infra-networking-and-navigation) |
 
 ## Quick start
 
@@ -212,6 +254,46 @@ curl -s -u dave:x -X POST http://localhost:4004/procurement/syncLegacySuppliers
 | "Is anything actually monitored, or is this just logs?" | `http://localhost:3000` (Grafana, pre-provisioned) — real request-rate/latency and domain metrics (requisition lifecycle, PO anomaly severity, gateway rate limiting) sourced from every service's own `/metrics`; see `docs/operations/observability.md` for what's real here vs. what's still BTP-deployment-gated (Cloud ALM, Application Logging, Dynatrace) |
 | "How would this promote across dev/qa/prod for real?" | `infra/terraform/README.md`, `docs/operations/environments.md` |
 
+## Deployed on BTP: infra, networking, and navigation
+
+The five services above run identically whether you're pointed at
+`localhost` or the real URLs in [Live on BTP](#live-on-btp) — same
+code, same request handlers. What's genuinely different once deployed:
+
+- **What Terraform actually provisioned, and how to do the same by hand
+  in the cockpit** — `infra/terraform/README.md` (the real, applied
+  landing zone: entitlements, CF org adoption, XSUAA/role collections,
+  and — a genuinely interesting real bug — why the HANA Cloud database
+  and XSUAA instance *aren't* Terraform-managed) and
+  `docs/concepts/15-terraform-vs-cockpit.md` (the general concept).
+- **The real network topology and request flow, deployed** — CF's
+  routing layer, how `cf-deploy.yml` wires each app's real route into
+  the next one, the XSUAA token flow, and the HDI-container-on-a-
+  HANA-Cloud-instance relationship (with sequence diagrams):
+  `docs/operations/networking-and-request-flow.md`.
+- **How to see and navigate all of this in the BTP cockpit yourself** —
+  every screen (Applications, Service Instances, Entitlements, Role
+  Collections), with a cockpit-action → CLI-equivalent quick reference:
+  `docs/operations/btp-cockpit-navigation.md`.
+- **Restarting a stopped app** — `cf start <app-name>` (needs the `cf`
+  CLI + `cf login` against `api.cf.us10-001.hana.ondemand.com`, org
+  `4cbf0c12trial`, space `dev`), or the cockpit's Applications screen →
+  app → **Start** button, no CLI needed — see
+  `docs/operations/btp-cockpit-navigation.md` §2.
+
+## Monitoring and observability
+
+Every service's real Prometheus `/metrics` endpoint is live on the
+deployed apps too — curl them directly, see [Live on BTP](#live-on-btp)
+for the base URLs (`/metrics` on each). `cf logs <app> --recent` (or the
+cockpit's own Logs tab) gives you real, live log output from the
+running deployed containers, no separate setup — this is what diagnosed
+every real bug in [Verified](#verified-a-real-end-to-end-run) below.
+Prometheus/Grafana *scraping* the deployed apps (the dashboard layer
+that exists locally, see [Port map](#port-map)) isn't wired up against
+BTP yet — a real, documented gap, not hidden. Full story:
+`docs/operations/observability.md`.
+
 ## Port map
 
 | Service | URL | Notes |
@@ -240,12 +322,17 @@ This isn't a stack that was written and assumed to work — it's been run for re
 
 **Bugs found and fixed earlier, via live end-to-end testing of `api-gateway`** (see `services/api-gateway/README.md` for the full account): an empty-body-forwarding bug in the gateway's proxy (the global `express.json()` middleware consumes the request stream before the proxy handler can re-forward raw bytes — fixed by re-serializing the already-parsed body), and a more serious one — an unhandled `fetch()` rejection in `procurement-core`'s `syncLegacySuppliers` handler that **crashed the entire server process** on a downstream outage. Both fixed and verified live, chain intact: client → gateway → procurement-core → legacy-erp-gateway.
 
+**Bugs found and fixed getting the real BTP deploy working** — 8 more, this time against the live trial account, not a local simulation. The short version (full detail in `infra/terraform/README.md` and `docs/next/next.md`'s session 11 entry): a GitHub Actions permissions ceiling that blocked the whole `deploy.yml` file from even starting; a reusable-workflow secrets-scoping bug (`cf-deploy.yml` couldn't see a real repo secret it wasn't declared to receive); a hardcoded wrong CF org name and a hardcoded wrong CF API endpoint (both silently "worked" — auth succeeded — while being unable to see the org's actual resources); an invalid `cf deploy` flag; `ai-copilot` crashing on every deploy because its startup eagerly called an unreachable Ollama instead of degrading gracefully (now fixed — see [Live on BTP](#live-on-btp)); and two genuinely deep infra bugs — Terraform creating a HANA Cloud database at the wrong scope (invisible to the CF space's broker) and a duplicate XSUAA instance under the same identity as `procurement-core`'s own MTA-created one (a real broker-level conflict, not a naming collision) — both root-caused and fixed, documented in full in `infra/terraform/README.md`. End result: `gh workflow run deploy -f target=cf` runs clean, all 5 services deployed successfully in one run.
+
 ## Known limitations / honesty notes
 
 - **This is a teaching/portfolio artifact, not a production system.** It reproduces real SAP BTP extension patterns (Clean Core side-by-side extension, Destination-service-shaped connectivity, API Management, event-driven microservices) against a fictional procurement domain and fictional data.
 - **`ai-copilot`'s local model (`qwen2.5:1.5b` via Ollama) is small.** It's the free, offline, trial-compatible path; the documented production path is SAP AI Core / Generative AI Hub, gated on BTP free tier rather than the plain trial (see `docs/concepts/09-ai-on-btp.md`).
-- **`procurement-core`'s local dev profile uses SQLite and CAP's mocked auth**, not HANA Cloud and real XSUAA — deliberately, so the whole stack above needs zero BTP account to run. The production profile (HANA Cloud, real XSUAA scopes/role collections) is written and validated in `mta.yaml`/`xs-security.json`/`infra/terraform`, not yet applied — see `infra/terraform/README.md` for exactly what's verified vs. what still needs a live apply.
+- **`procurement-core`'s local dev profile uses SQLite and CAP's mocked auth**, not HANA Cloud and real XSUAA — deliberately, so the whole stack above needs zero BTP account to run. The deployed profile (real HANA Cloud, real XSUAA scopes/role collections) is live — see [Live on BTP](#live-on-btp) — but its token flow hasn't been exercised end-to-end by a real OAuth2 client yet, only via CAP's local mocked auth; see `docs/operations/networking-and-request-flow.md` §3 and its "Known limitations".
 - **No genuinely separate qa/prod BTP subaccounts yet** — the trial provides one subaccount; real multi-environment promotion needs a paid landscape (see `infra/terraform/README.md`).
+- **Inter-app calls on the deployed system go over public CF routes, not private/internal networking** — Application Networking (`cf add-network-policy`) isn't set up yet; see `docs/operations/networking-and-request-flow.md`'s "Known limitations" for exactly what that means and the real fix.
+- **Prometheus/Grafana aren't scraping the deployed BTP apps** — the `/metrics` endpoints are live and correct (see [Live on BTP](#live-on-btp)), the dashboard layer on top of them is local-only today; see [Monitoring and observability](#monitoring-and-observability).
+- **BTP trial auto-stops idle apps** — see [Live on BTP](#live-on-btp) for what that looks like and how to restart one.
 - Every other per-service limitation (event-bus-vs-webhook, Cloud Connector simulation, in-memory state, etc.) is documented in that service's own README rather than duplicated here.
 
 ## Coverage

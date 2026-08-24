@@ -85,7 +85,7 @@ What's genuinely still a hard limit, not a to-do: **ABAP RAP and Integration Sui
 4. Author `services/integration-flow`'s iFlow in Integration Suite's Cloud Integration designer, export the real `.iflw`/BPMN2 package, commit it here.
 5. Configure `transport/cloud-transport-management`'s nodes/routes — realistically, given the trial's single real subaccount, as **CF-space-level nodes (dev/test/prod spaces within that one subaccount)** rather than the full separate-subaccount topology a paid landscape would use; documented as a deliberately scaled-down but structurally real demonstration of the same TMS mechanism, not a different one. `procurement-core`'s existing `mtaext-dev.mtaext` already anticipates this — `mtaext-qa.mtaext`/`mtaext-prod.mtaext` are the concrete next artifacts once nodes exist, wired into the transport-upload step of that service's CI.
 
-This sequence is gated on the same `terraform apply` review checkpoint everything else in `infra/terraform` already waits on — nothing above jumps ahead of that review.
+`terraform apply` has since run for real, repeatedly, against the live subaccount (session 10-11 — see `infra/terraform/README.md` and `docs/next/next.md`), and all 5 core services are deployed and live — steps 3-5 above are next in the queue for the same reason stated when written (BAS/Integration Suite designer/TMS node config all need GUI tooling this repo can't drive headlessly), not gated on any further review checkpoint.
 
 ## Scope expansion (session 8 — writing steps 3-5 as real source now, ahead of the account gate)
 
@@ -117,6 +117,7 @@ Vishal's direction: finish every repo-level/code-level artifact now, so that onc
 | `12-multitenancy-and-saas.md` | `@sap/cds-mtxs` (MTX), tenant onboarding/extension model, feature-toggle CDS models |
 | `13-cloud-alm-and-operations-services.md` | SAP Cloud ALM (chosen deliberately over classic Solution Manager), Alert Notification Service, Job Scheduling Service, Automation Pilot, Feature Flags service |
 | `14-sap-activate-methodology.md` | Discover/Prepare/Explore(Fit-to-Standard)/Realize/Deploy/Run mapped onto this project's own phased roadmap below |
+| `15-terraform-vs-cockpit.md` | Why IaC at all on a single trial subaccount; the general Terraform-resource-vs-cockpit-screen mapping — the concrete, per-module version lives in `infra/terraform/README.md` |
 
 ### `services/` — real running code
 | Service | What it is |
@@ -140,6 +141,8 @@ Vishal's direction: finish every repo-level/code-level artifact now, so that onc
 - `sre-practices.md` — SAP-flavored incident runbooks (failed transport import, XSUAA token failures, HDI binding failures), MTTR tracking, an Automation Pilot-style auto-remediation runbook note
 - `observability.md` — **Cloud ALM** (deliberately instead of classic Solution Manager), Application Logging service, Prometheus/Grafana on Kyma, Langfuse for the AI layer
 - `fiori-launchpad-administration.md` — a short note distinguishing "building the Fiori Elements app" (done, `procurement-core`) from "exposing it via Launchpad catalogs/spaces/role collections" (an admin concern, documented not built)
+- `networking-and-request-flow.md` — infra- and code-level request flow, local (Docker bridge network) vs. real deployed (CF routing/Gorouter, XSUAA token flow, HDI-container-on-HANA-Cloud relationship), with diagrams
+- `btp-cockpit-navigation.md` — screen-by-screen guide to seeing everything this project provisioned/deployed in the real BTP cockpit, plus a cockpit-action → CLI-equivalent quick reference
 
 ### Additional BTP services woven into existing services (not new top-level folders)
 | Addition | Where it lives | Status |

@@ -49,14 +49,61 @@ reasoning (Cloud ALM instead of classic Solution Manager, matching SAP's
 own migration direction). Not yet subscribed/connected — documented
 intent.
 
+## Now deployed: the same `/metrics` endpoints, live on BTP
+
+All 5 services are deployed and running on Cloud Foundry (see the root
+README's "Live on BTP" section) — the exact same `prom-client`
+`/metrics` endpoints documented above are reachable over the public
+internet right now, verified directly, not assumed:
+
+```bash
+curl -s https://api-gateway.cfapps.us10-001.hana.ondemand.com/metrics | head -20
+curl -s https://ai-copilot.cfapps.us10-001.hana.ondemand.com/copilot/health
+# -> {"status":"degraded","ollamaReachable":false,"embeddingModel":"all-minilm",
+#     "chatModel":"qwen2.5:1.5b","corpusChunks":0}
+```
+
+**What's genuinely different from local, and what isn't:** the metrics
+themselves are the identical code path (same `metrics.js`, same
+`prom-client` counters/histograms) — only *where they're scraped from*
+changes. Locally, `docker-compose.yml`'s `prometheus` container scrapes
+all five every 15s and Grafana's pre-provisioned dashboard reads from
+it. **On BTP, nothing is scraping these endpoints yet** — no Prometheus
+instance is pointed at the deployed apps, so there's no live Grafana
+dashboard for the deployed system today. This is a real, honest gap,
+not hidden: the endpoints exist and are correct (curl them directly
+above), the scraper/dashboard layer on top of them simply isn't stood
+up against BTP yet. Closing it for real would mean either a Kyma-side
+Prometheus (once the pending Kyma approval lands — see
+`infra/terraform/README.md`) scraping across both CF and Kyma, or SAP's
+own **Continuous Delivery / Cloud ALM Monitoring** wired to each app's
+route — either is a genuine next step, not attempted this session.
+
+**`cf logs` works right now, no separate setup** — this is real,
+already-available BTP tooling, distinct from the Application Logging
+service below:
+
+```bash
+cf logs api-gateway --recent   # or any of the other 4 app names
+```
+
+The cockpit's own **Applications → app → Logs** tab (see
+`docs/operations/btp-cockpit-navigation.md`) is the same thing without
+the CLI — both read the same real, live stdout/stderr from the running
+container, no shipping/aggregation step required for a single app on a
+single space.
+
 ## SAP Application Logging service
 
-BTP's managed log aggregation for Cloud Foundry apps — the natural
-destination for the `console.warn`/`console.log` output every service in
-this project already produces, once deployed. Not yet wired — local dev
-just reads stdout directly, which is sufficient for now and honestly
-simpler than standing up log shipping for a project with no real traffic
-yet.
+BTP's managed log aggregation for Cloud Foundry apps, layered on top of
+what `cf logs`/the cockpit's Logs tab already gives you for free — the
+natural destination once retention/search across restarts or multiple
+apps at once matters (`cf logs --recent` only shows a rolling recent
+buffer per app, not a searchable history). Not yet subscribed — for a
+single-space trial with `cf logs` already covering real, live debugging
+needs (used throughout this session to diagnose every deploy failure),
+standing up a separate log-aggregation subscription hasn't been
+necessary yet, not because it's unavailable.
 
 ## Dynatrace vs. Prometheus/Grafana — a real-world note, not a design choice made here
 
@@ -85,16 +132,21 @@ before deciding, not guessed) and what the upgrade path looks like.
 
 ## Known limitations (honesty notes)
 
-Every "SAP-native" item in this doc (Cloud ALM, Application Logging
-service, Dynatrace) is genuinely undeployed — those need a real BTP
-subscription/license this project's trial account doesn't provide. What
-*is* real and verified: Prometheus + Grafana, running locally against
-every service's genuine `/metrics` endpoint, plus `ai-copilot`'s tracer
-and `spend-anomaly-detector`'s review/alert log. `ai-copilot`'s own
-`copilot_ollama_reachable` gauge was code-reviewed and wired the same way
-as the other four services' metrics, but not independently re-verified
-live against a running Ollama instance in this pass (it shares the same
-`ai` Compose profile, and pulling its models is a multi-GB, several-minute
-step) — the pattern itself (an Express middleware + a `/metrics` route) is
-identical to the four services that were verified live, so this is a low-
-risk gap, but it's called out rather than silently assumed.
+Cloud ALM and Dynatrace are genuinely undeployed — those need a real BTP
+subscription/license this project's trial account doesn't provide.
+Application Logging service is available on this trial but not
+subscribed (see above — `cf logs` already covers this project's real
+debugging needs at its current scale). What *is* real and verified:
+Prometheus + Grafana running locally against every service's genuine
+`/metrics` endpoint, the identical `/metrics` endpoints now also live
+and directly curlable on the real deployed BTP apps (verified this
+session, see above — just not yet scraped/dashboarded there), `cf logs`
+against the real deployed apps (used throughout this session to
+diagnose every real deploy failure — see `infra/terraform/README.md`'s
+"What's verified" section for the actual bugs found this way), plus
+`ai-copilot`'s tracer and `spend-anomaly-detector`'s review/alert log.
+`ai-copilot`'s own `copilot_ollama_reachable` gauge is confirmed `false`
+on the real deployed app (`{"status":"degraded","ollamaReachable":
+false,...}` — no Ollama on CF, degrades gracefully by design; see that
+service's own README and the fix documented in
+`services/ai-copilot/src/server.js`'s `main()`).
