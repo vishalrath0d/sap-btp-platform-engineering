@@ -71,3 +71,28 @@ resource "btp_subaccount_role_collection" "this" {
     }
   ]
 }
+
+# Assigns var.assign_to_user to all 3 role collections - what actually
+# makes the deployed, XSUAA-protected procurement-core API testable by a
+# real user (see docs/operations/networking-and-request-flow.md §3 and
+# the root README's "Live on BTP" section for why this was previously a
+# gap: no real user had the role collections, so no real token would
+# have carried the Requester/Approver scopes the CDS model's @requires
+# annotations check). A genuinely BTP-scoped concept
+# (btp_subaccount_role_collection_assignment - subaccount-level,
+# unrelated to the CF-space-scoping issues modules/hana-cloud hit), so
+# Terraform is the correct tool here, unlike that case.
+#
+# Gated the same way as resource "this" above - skips cleanly on a
+# genuinely first-ever apply (var.xsuaa_xsappname == "") or if no user
+# was supplied (var.assign_to_user == "", the default) rather than
+# erroring against role collections that don't exist yet.
+resource "btp_subaccount_role_collection_assignment" "this" {
+  for_each = (var.xsuaa_xsappname != "" && var.assign_to_user != "") ? toset([
+    for rc in var.role_collections : rc.name
+  ]) : []
+
+  subaccount_id        = var.subaccount_id
+  role_collection_name = each.value
+  user_name            = var.assign_to_user
+}

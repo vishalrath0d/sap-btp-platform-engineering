@@ -130,6 +130,21 @@ Elements Yeoman generator or SAP's Fiori tools VS Code extension, neither of
 which run in this headless environment. Everything the annotations describe
 here carries over unchanged to that generated app.
 
+**Now also live on the real deployed instance, not just locally.**
+`@sap/cds`'s own default (`node_modules/@sap/cds/lib/env/defaults.js`:
+`fiori: { preview: !production, routes: !production }`) turns this preview
+off in production on purpose — the standard advice is "ship a real
+generated app, not the dev-time preview." `package.json`'s `cds.fiori`
+block explicitly re-enables it (`preview: true, routes: true`, real CAP
+config, not a hack) for this project's deployed instance, since a
+standalone HTML5-repo app isn't built yet and a reachable UI is still
+worth having — same URL shape, on the real deployed route:
+`https://4cbf0c12trial-dev-procurement-core-srv.cfapps.us10-001.hana.ondemand.com/$fiori-preview/ProcurementService/PurchaseRequisitions`
+(see the root README's "Live on BTP" section — you'll be prompted to
+authenticate, since this hits the same real XSUAA-protected OData
+service the UI itself calls; see below for how to actually get a real
+token to browse it with real data).
+
 ### Run the tests
 
 ```bash

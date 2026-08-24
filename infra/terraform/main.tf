@@ -161,6 +161,11 @@ module "role_collections" {
   source          = "./modules/role-collections"
   subaccount_id   = module.subaccount.id
   xsuaa_xsappname = var.xsuaa_xsappname
+  # Assigns the real, applying BTP user (var.btp_username) to all 3 role
+  # collections - what makes the deployed procurement-core API testable
+  # end-to-end by a real user, not just adopted-and-unused role
+  # collections. See modules/role-collections/main.tf's own comment.
+  assign_to_user = var.btp_username
 
   role_collections = [
     { name = "ProcureIQ Requester", description = "Business users who raise Purchase Requisitions", role_template_name = "Requester" },

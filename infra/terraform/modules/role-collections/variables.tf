@@ -8,6 +8,12 @@ variable "xsuaa_xsappname" {
   default     = ""
 }
 
+variable "assign_to_user" {
+  description = "Username (email) to assign to all role collections in var.role_collections - typically the same real BTP user who applies this (var.btp_username at the root). Empty string (default) skips assignment entirely."
+  type        = string
+  default     = ""
+}
+
 variable "role_collections" {
   description = "List of { name, description, role_template_name } - role_template_name must match a role-template defined in the app's xs-security.json."
   type = list(object({

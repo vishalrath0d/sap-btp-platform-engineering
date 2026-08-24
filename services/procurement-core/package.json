@@ -28,6 +28,10 @@
     "chai-as-promised": "^8"
   },
   "cds": {
+    "fiori": {
+      "preview": true,
+      "routes": true
+    },
     "requires": {
       "db": {
         "kind": "sqlite",
