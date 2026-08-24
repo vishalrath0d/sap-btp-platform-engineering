@@ -130,18 +130,40 @@ Both closed for real:
   --wait` (took ~5 minutes, same order of magnitude as its original
   creation). Now documented in the root README alongside the CF-app
   auto-stop note.
-- **One new real bug found, documented, deliberately not fixed** (user
-  asked to move on to other things today): `POST /procurement/
-  PurchaseRequisitions` 500s on the deployed HANA instance -
-  `duplicate column name: STATUS`, root-caused to `srv/service-ui.cds`'s
-  `status as statusText : String` colliding with the real `status`
-  column in HANA's generated INSERT (SQLite never exercises this).
-  Full detail and a likely fix direction in `services/procurement-core/
-  README.md`'s "Known limitations" and `docs/operations/networking-and-
-  request-flow.md`'s "Known limitations".
 - `career-notes/` (gitignored, empty) added at the user's request for
   future resume/referral/application-tracking notes - explicitly kept
   out of this repo, populated only when asked.
+
+**Second addendum, same session** - user asked to actually fix the
+`statusText` bug above, and to make the Fiori UI a genuinely shareable
+link (open in a browser, see real data, no login). Both done, both
+verified against the real deployed instance, not just locally:
+- `statusText` bug fixed (see `services/procurement-core/README.md`'s
+  "Known limitations" for the two rejected fix attempts - `virtual`
+  strips reads too, CDS calculated-element `=` syntax isn't valid
+  inside `extend projection X with {}` - and the real fix, a
+  `case/when` rewrite instead of a direct 1:1 alias).
+- Reads made public (`requires: 'any'` on `ProcurementService` +
+  `@restrict` on the two writable entities), writes/actions unchanged.
+  One more genuinely subtle bug found getting this to actually work on
+  the deployed instance (entity-level annotations alone weren't
+  enough - a separate, production-only, service-wide gate inside
+  `@sap/cds`'s own HTTP adapter needed its own `requires: 'any'` too) -
+  full story in the same README section.
+- Real, live-verified end state: `GET .../$fiori-preview/
+  ProcurementService/PurchaseRequisitions` and `GET .../procurement/
+  PurchaseRequisitions` both return real `200`s with zero auth header;
+  `POST .../PurchaseRequisitions` (create) still correctly `401`s with
+  none. The root README's "Live on BTP" section has the exact
+  shareable URL.
+- One real process mistake worth remembering for next time: a combined
+  `git add fileA fileB` where `fileB` no longer existed on disk
+  (already `git rm`'d in the same working session) silently failed to
+  stage `fileA` too - a commit landed with only the unrelated deletion,
+  not the actual code fix. Caught by checking `git status`/`git diff
+  --stat` right after committing, not assumed clean. Worth `git add`ing
+  paths separately (or checking `git status` immediately after) when a
+  commit is expected to contain a specific, important change.
 
 ### Session 10 — real `terraform apply`, real bugs found and fixed, one genuine blocker hit
 

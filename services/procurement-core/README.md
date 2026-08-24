@@ -179,26 +179,53 @@ same call.
 
 ## Known limitations (honesty notes, not hidden)
 
-- **`POST /procurement/PurchaseRequisitions` (creating a *new*
-  requisition) fails on the real deployed HANA-backed instance** —
-  confirmed live this session, not yet fixed. Real error from
-  `procurement-core-srv`'s own logs: `duplicate column name: STATUS` in
-  the generated INSERT SQL. Root cause: `srv/service-ui.cds`'s
-  `status as statusText : String` (a `@Common.Text` annotation helper
-  that gives the Fiori UI a human-readable status label) gets included
-  in HANA's generated INSERT statement and collides with the real
-  `status` enum column already in that same INSERT — two columns
-  resolving to the identical underlying HANA column name. SQLite (local
-  dev, and this service's own `npm test` suite) never exercises this
-  exact code path, which is why it wasn't caught before deploying.
-  Reads and actions on *existing*, already-seeded requisitions
-  (`submit`, `approve`, `rejectRequisition`) are unaffected — this
-  specifically blocks creating brand-new requisitions on the deployed
-  instance. Likely real fix: mark `statusText` `@readonly` /
-  `@cds.persistence.calculated` (or restructure it as a proper CDS
-  calculated element rather than a plain aliased projection) so
-  `@cap-js/hana`'s insert-generation never treats it as an insertable
-  column — not yet attempted.
+- ~~`POST /procurement/PurchaseRequisitions` fails on the real deployed
+  HANA-backed instance~~ — **fixed this session.** Real error (from
+  `procurement-core-srv`'s own logs): `duplicate column name: STATUS`
+  in the generated INSERT SQL. Root cause: the old `status as
+  statusText : String` form in `srv/service-ui.cds` (a `@Common.Text`
+  annotation helper giving the Fiori UI a human-readable status label)
+  aliased `statusText` directly to the real `status` column, and
+  HANA's compiler resolved that alias back to the source column name
+  when building the base table's writable columns — a literal
+  duplicate. SQLite (local dev, this service's own `npm test` suite)
+  never exercises this exact code path, which is why it wasn't caught
+  before deploying. Two fix attempts were tried and rejected first,
+  worth knowing if this pattern comes up again: marking `statusText`
+  `virtual` correctly excludes it from INSERT/UPDATE but *also* strips
+  it from reads entirely (confirmed live — `virtual` means no database
+  backing at all, not merely "not writable"); a genuine CDS calculated
+  element (`statusText = status`, `=` syntax) isn't valid inside an
+  `extend projection X with {}` block at all (real compile error,
+  "Alias name is required for this select item" — that block uses
+  SELECT-item `as` syntax, not entity-element `=` syntax). The real
+  fix: keep the working `as`-aliased form, but rewrite `statusText`'s
+  own expression as a `case/when` mapping to identical string values
+  instead of directly aliasing `status` 1:1 — verified against the
+  real generated HANA artifacts (`sap.procureiq.PurchaseRequisitions.
+  hdbtable` has exactly one `status` column now) and a real running
+  local server (reads still return correct `statusCriticality`/
+  `statusText`, creates succeed). Deployed and confirmed live.
+- **`ProcurementService`'s reads are deliberately public** (`srv/
+  service.cds`: `requires: 'any'` at the service level, `@restrict` on
+  `PurchaseRequisitions`/`PurchaseRequisitionItems` granting `READ` to
+  `'any'` while keeping `CREATE`/`UPDATE`/`DELETE` and the
+  `submit`/`approve`/`rejectRequisition` actions gated exactly as
+  before) — so the deployed Fiori preview UI is a genuine, cold-open,
+  shareable link (see the root README's "Live on BTP"). A real,
+  service-level-specific bug was found and fixed getting this to
+  actually work once deployed: entity-level `@requires`/`@restrict`
+  alone weren't enough — confirmed live, every read still `401`'d.
+  Root cause, found directly in `@sap/cds`'s own framework source
+  (`node_modules/@sap/cds/lib/srv/protocols/http.js`): CAP's HTTP
+  adapter applies a *separate, service-wide* gate ahead of any
+  entity-level rule, defaulting every service to `authenticated-user`
+  in production unless the service itself opts out. Fixed by adding
+  `requires: 'any'` to `ProcurementService`'s own top-level annotation
+  too. This never showed up locally because that outer gate only
+  activates when `NODE_ENV=production` (true on CF, false in local
+  dev) — a genuinely environment-dependent bug, not a logic error in
+  the per-entity rules.
 - **Document numbering (`PR-00001`, `PO-00001`) is `count(*)`-based** (`srv/lib/sequence.js`) —
   fine for a single local writer, **not safe under concurrent requests**. A real
   deployment needs a DB sequence or a dedicated number-range service. Documented

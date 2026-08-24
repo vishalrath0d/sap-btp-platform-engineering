@@ -298,17 +298,22 @@ published JSON Schema, not guessed).
   /$fiori-preview/ProcurementService/PurchaseRequisitions` with a real
   Bearer token (from the password-grant flow above) returns a real 200
   with genuine UI5-bootstrapped HTML.
-- **A real, separate bug surfaced while proving the above end to end,
-  not yet fixed**: `POST /procurement/PurchaseRequisitions` (creating a
-  brand-new requisition) 500s on the deployed HANA-backed instance —
-  `duplicate column name: STATUS` in the generated INSERT SQL, per
-  `procurement-core-srv`'s own logs. Root cause: `srv/service-ui.cds`'s
-  `status as statusText : String` (a `@Common.Text` helper annotation
-  for the Fiori UI's status label) gets included in HANA's generated
-  INSERT and collides with the real `status` column — SQLite (local
-  dev, and this project's own test suite) never exercises this exact
-  code path, which is why it wasn't caught earlier. Reads and actions
-  on *existing* seeded requisitions (`submit`, `approve`) are
-  unaffected; only creating new ones on the deployed instance is
-  blocked. See `services/procurement-core/README.md`'s "Known
-  limitations".
+- ~~A real, separate bug surfaced while proving the above end to end~~
+  — **fixed this session, same as the two above**: `POST /procurement/
+  PurchaseRequisitions` (creating a brand-new requisition) originally
+  500'd on the deployed HANA-backed instance — `duplicate column name:
+  STATUS` in the generated INSERT SQL. Root cause and the real fix
+  (rewriting `statusText`'s calculated expression) are documented in
+  full in `services/procurement-core/README.md`'s "Known limitations".
+- **Reads are now genuinely public on the deployed instance too**
+  (`requires: 'any'` at the `ProcurementService` level, `@restrict` on
+  the two writable entities) — the Fiori preview UI and raw OData reads
+  both return real `200`s with zero auth header; writes/actions remain
+  exactly as role-gated as before. One more real, service-level-
+  specific bug found and fixed getting there: entity-level
+  `@requires`/`@restrict` alone weren't enough in production —
+  `@sap/cds`'s own HTTP adapter (`node_modules/@sap/cds/lib/srv/
+  protocols/http.js`) applies a separate, service-wide gate ahead of
+  any entity rule, defaulting every service to `authenticated-user`
+  unless the service itself opts out. See `services/procurement-core/
+  README.md`'s "Known limitations" for the full story.
