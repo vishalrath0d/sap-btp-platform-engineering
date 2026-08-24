@@ -1,6 +1,10 @@
 # SAP BTP Platform Engineering — ProcureIQ
 
-> **Status: deployed and live on a real SAP BTP trial subaccount.** All five services below run locally with zero BTP account needed (see [Quick start](#quick-start)) — and are *also* actually deployed and reachable right now on Cloud Foundry, real infra provisioned by `infra/terraform`, real bugs found and fixed getting there. See [Live on BTP](#live-on-btp) for the real URLs.
+> **Status: deployed and live on a real SAP BTP trial subaccount.** All five services below run locally with zero BTP account needed (see [Quick start](#quick-start)) — and are *also* actually deployed and reachable right now on Cloud Foundry, real infra provisioned by `infra/terraform`, real bugs found and fixed getting there. See [Live on BTP](#live-on-btp) for the full list of real URLs.
+>
+> **👉 Try the live, read-only Fiori UI — no login needed:**
+> **https://4cbf0c12trial-dev-procurement-core-srv.cfapps.us10-001.hana.ondemand.com/$fiori-preview/ProcurementService/PurchaseRequisitions**
+> A real, generated SAP Fiori Elements app, showing real seeded purchase requisition data straight from the deployed HANA Cloud instance. Reads are open by design; writes stay role-gated (see [Live on BTP](#live-on-btp)). May occasionally be stopped by BTP's trial auto-stop policy — see that section for how to tell and what it means.
 
 A hands-on, production-grade platform engineering project on **SAP Business Technology Platform**, built around a real SAP extension scenario — procurement (Purchase Requisition → Purchase Order → Supplier → Contract) — and covering the full SAP DevOps toolchain: CAP, ABAP Cloud/RAP, Cloud Foundry + Kyma, HANA Cloud, XSUAA, Terraform, Project Piper, Cloud Transport Management, gCTS, Integration Suite, and an AI copilot layer (SAP AI Core / Generative AI Hub, with a trial-compatible fallback).
 
