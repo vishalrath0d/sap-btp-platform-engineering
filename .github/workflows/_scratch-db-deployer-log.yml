@@ -14,7 +14,7 @@ jobs:
         run: |
           curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
           sudo mv cf8 /usr/local/bin/cf
-      - name: cf login and get db-deployer's real recent logs
+      - name: cf login, check hana instance status, try resuming it
         env:
           CF_USERNAME: ${{ secrets.BTP_USERNAME }}
           CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
@@ -22,4 +22,9 @@ jobs:
           cf api https://api.cf.us10-001.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
           cf target -o 4cbf0c12trial -s dev
-          cf logs procurement-core-db-deployer --recent
+          echo "=== current status ==="
+          cf service procureiq-dev-hana-cloud
+          echo "=== attempting resume via update-service ==="
+          cf update-service procureiq-dev-hana-cloud -c '{"data":{"serviceStopped":false}}' --wait || true
+          echo "=== status after ==="
+          cf service procureiq-dev-hana-cloud
