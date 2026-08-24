@@ -83,12 +83,22 @@ resource "btp_subaccount_role_collection" "this" {
 # unrelated to the CF-space-scoping issues modules/hana-cloud hit), so
 # Terraform is the correct tool here, unlike that case.
 #
-# Gated the same way as resource "this" above - skips cleanly on a
-# genuinely first-ever apply (var.xsuaa_xsappname == "") or if no user
-# was supplied (var.assign_to_user == "", the default) rather than
-# erroring against role collections that don't exist yet.
+# Gated on var.xsuaa_xsappname only (skips cleanly on a genuinely
+# first-ever apply, same as resource "this" above) - real Terraform
+# constraint hit live: var.assign_to_user is derived from the root's
+# sensitive var.btp_username, and a value derived from a sensitive
+# variable cannot be used in a for_each condition at all ("Sensitive
+# values...cannot be used as for_each arguments" - the sensitivity
+# could otherwise leak via the resulting resource instance keys).
+# Attributes (user_name below) CAN be sensitive-derived; only for_each/
+# count cannot - the exact same real distinction this module's own
+# xsuaa_xsappname redesign already relies on. In practice
+# assign_to_user is always set in this project (wired straight to the
+# required var.btp_username at the root) - if it were ever genuinely
+# blank while xsuaa_xsappname is set, the real API would reject the
+# empty username with a clear error rather than silently skipping.
 resource "btp_subaccount_role_collection_assignment" "this" {
-  for_each = (var.xsuaa_xsappname != "" && var.assign_to_user != "") ? toset([
+  for_each = var.xsuaa_xsappname != "" ? toset([
     for rc in var.role_collections : rc.name
   ]) : []
 
