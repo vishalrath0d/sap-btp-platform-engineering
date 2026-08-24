@@ -179,6 +179,26 @@ same call.
 
 ## Known limitations (honesty notes, not hidden)
 
+- **`POST /procurement/PurchaseRequisitions` (creating a *new*
+  requisition) fails on the real deployed HANA-backed instance** —
+  confirmed live this session, not yet fixed. Real error from
+  `procurement-core-srv`'s own logs: `duplicate column name: STATUS` in
+  the generated INSERT SQL. Root cause: `srv/service-ui.cds`'s
+  `status as statusText : String` (a `@Common.Text` annotation helper
+  that gives the Fiori UI a human-readable status label) gets included
+  in HANA's generated INSERT statement and collides with the real
+  `status` enum column already in that same INSERT — two columns
+  resolving to the identical underlying HANA column name. SQLite (local
+  dev, and this service's own `npm test` suite) never exercises this
+  exact code path, which is why it wasn't caught before deploying.
+  Reads and actions on *existing*, already-seeded requisitions
+  (`submit`, `approve`, `rejectRequisition`) are unaffected — this
+  specifically blocks creating brand-new requisitions on the deployed
+  instance. Likely real fix: mark `statusText` `@readonly` /
+  `@cds.persistence.calculated` (or restructure it as a proper CDS
+  calculated element rather than a plain aliased projection) so
+  `@cap-js/hana`'s insert-generation never treats it as an insertable
+  column — not yet attempted.
 - **Document numbering (`PR-00001`, `PO-00001`) is `count(*)`-based** (`srv/lib/sequence.js`) —
   fine for a single local writer, **not safe under concurrent requests**. A real
   deployment needs a DB sequence or a dedicated number-range service. Documented

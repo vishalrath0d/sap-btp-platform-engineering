@@ -4,7 +4,10 @@ Last updated: 2026-08-24 (end of session 11 — **all 5 services deployed
 and live on the real BTP trial for the first time**; found and fixed 8
 more real, live-only bugs getting there; the previously-unused
 Terraform-managed HANA Cloud + XSUAA instances gated off and destroyed;
-extensive documentation pass — see below)
+extensive documentation pass; **then, same session, closed the "no live
+UI / no real OAuth test" gap for real** — real password-grant token,
+Fiori preview UI live, one new HANA-only bug found and documented, not
+fixed — see the addendum at the end of the session 11 section below)
 
 ### Session 11 — first real end-to-end deploy, 8 more real bugs, docs overhaul
 
@@ -88,6 +91,57 @@ Kyma section, unchanged this session). The rename away from "ProcureIQ"
 (a real company's name) was raised and explicitly deferred by the user
 ("let it be, doesn't matter, focus on other things") — not done, and
 not currently planned unless asked again.
+
+**Addendum, same session** — user asked to close the two gaps the
+"Live on BTP" testing just surfaced: no live browser UI, and no real
+OAuth2 client to test `/procurement/*` with. Also explicitly clarified
+`ai-copilot`'s degraded state doesn't affect anything else (confirmed:
+nothing in `procurement-core`/`api-gateway`/`legacy-erp-gateway`/
+`spend-anomaly-detector` calls `ai-copilot` at all — it's genuinely
+isolated, per the root README's own architecture diagram, unchanged).
+Both closed for real:
+- `infra/terraform/modules/role-collections` gained a real
+  `btp_subaccount_role_collection_assignment` resource, assigning the
+  real applying user (`var.btp_username`) to all 3 role collections —
+  hit and fixed one real Terraform constraint along the way (a value
+  derived from a `sensitive = true` variable can't be used in a
+  `for_each` condition; fixed by gating on the non-sensitive
+  `xsuaa_xsappname` instead, keeping the sensitive value only in the
+  resource *attribute*).
+- `procurement-core`'s `package.json` now explicitly sets
+  `cds.fiori.preview`/`routes: true` (real CAP config -
+  `node_modules/@sap/cds/lib/env/defaults.js` confirms these default to
+  `!production`) so the Fiori preview UI is reachable on the deployed
+  route too.
+- Real password-grant OAuth2 token flow confirmed working end to end:
+  real scopes (`Requester`/`Approver`/`IntegrationAdmin`), real seeded
+  data returned from `GET /procurement/PurchaseRequisitions`, real 200
+  + UI5 HTML from the Fiori preview with that token attached. See the
+  root README's "Live on BTP" section for the exact runnable commands.
+  `client_credentials` grant was tried first and authenticates fine but
+  gets a 500 on every `/procurement/*` call — CAP's authorization layer
+  needs a real user identity, not just a client; documented as a real,
+  useful negative result, not a dead end.
+- Along the way, found the HANA Cloud instance itself was also
+  auto-stopped by the trial (separate from CF apps auto-stopping) -
+  `procurement-core-db-deployer`'s task failed with "HANA Database
+  instance is stopped" until resumed via `cf update-service
+  procureiq-dev-hana-cloud -c '{"data":{"serviceStopped":false}}'
+  --wait` (took ~5 minutes, same order of magnitude as its original
+  creation). Now documented in the root README alongside the CF-app
+  auto-stop note.
+- **One new real bug found, documented, deliberately not fixed** (user
+  asked to move on to other things today): `POST /procurement/
+  PurchaseRequisitions` 500s on the deployed HANA instance -
+  `duplicate column name: STATUS`, root-caused to `srv/service-ui.cds`'s
+  `status as statusText : String` colliding with the real `status`
+  column in HANA's generated INSERT (SQLite never exercises this).
+  Full detail and a likely fix direction in `services/procurement-core/
+  README.md`'s "Known limitations" and `docs/operations/networking-and-
+  request-flow.md`'s "Known limitations".
+- `career-notes/` (gitignored, empty) added at the user's request for
+  future resume/referral/application-tracking notes - explicitly kept
+  out of this repo, populated only when asked.
 
 ### Session 10 — real `terraform apply`, real bugs found and fixed, one genuine blocker hit
 
