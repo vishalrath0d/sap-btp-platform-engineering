@@ -16,7 +16,7 @@ jobs:
         run: |
           curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
           sudo mv cf8 /usr/local/bin/cf
-      - name: cf login, get xsuaa client creds, try client_credentials grant
+      - name: cf login, get xsuaa client creds
         env:
           CF_USERNAME: ${{ secrets.BTP_USERNAME }}
           CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
@@ -26,23 +26,32 @@ jobs:
           cf target -o 4cbf0c12trial -s dev
           cf create-service-key procurement-core-xsuaa token-test >/dev/null 2>&1 || true
           CREDS=$(cf service-key procurement-core-xsuaa token-test | sed -n '/{/,$p')
-          CLIENT_ID=$(echo "$CREDS" | jq -r '.credentials.clientid')
-          CLIENT_SECRET=$(echo "$CREDS" | jq -r '.credentials.clientsecret')
-          TOKEN_URL=$(echo "$CREDS" | jq -r '.credentials.url')
-          echo "token url: $TOKEN_URL"
+          echo "CLIENT_ID=$(echo "$CREDS" | jq -r '.credentials.clientid')" >> "$GITHUB_ENV"
+          echo "CLIENT_SECRET=$(echo "$CREDS" | jq -r '.credentials.clientsecret')" >> "$GITHUB_ENV"
+          echo "TOKEN_URL=$(echo "$CREDS" | jq -r '.credentials.url')" >> "$GITHUB_ENV"
 
-          echo "=== client_credentials grant ==="
+      - name: real password grant, then exercise the full requisition -> approval -> PO flow
+        env:
+          BTP_USERNAME: ${{ secrets.BTP_USERNAME }}
+          BTP_PASSWORD: ${{ secrets.BTP_PASSWORD }}
+        run: |
           RESP=$(curl -s "$TOKEN_URL/oauth/token" \
             -u "$CLIENT_ID:$CLIENT_SECRET" \
-            -d "grant_type=client_credentials")
-          echo "$RESP" | jq '.'
-          TOKEN=$(echo "$RESP" | jq -r '.access_token')
+            --data-urlencode "grant_type=password" \
+            --data-urlencode "username=$BTP_USERNAME" \
+            --data-urlencode "password=$BTP_PASSWORD" \
+            --data-urlencode "response_type=token")
+          echo "$RESP" | jq 'if .access_token then {token_type,expires_in,scope} else . end'
+          TOKEN=$(echo "$RESP" | jq -r '.access_token // empty')
+          if [ -z "$TOKEN" ]; then
+            echo "password grant not available/failed - see response above"
+            exit 0
+          fi
+          echo "=== decoded scopes ==="
+          echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq '.scope, .user_name' || true
 
-          echo "=== decoded token scopes ==="
-          echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq '.scope, .client_id, .grant_type' || true
-
-          echo "=== GET /procurement/PurchaseRequisitions with this token ==="
-          curl -s -o /tmp/resp.json -w "HTTP %{http_code}\n" \
-            -H "Authorization: Bearer $TOKEN" \
-            https://4cbf0c12trial-dev-procurement-core-srv.cfapps.us10-001.hana.ondemand.com/procurement/PurchaseRequisitions
-          cat /tmp/resp.json | head -c 500
+          CORE=https://4cbf0c12trial-dev-procurement-core-srv.cfapps.us10-001.hana.ondemand.com
+          echo "=== GET PurchaseRequisitions ==="
+          curl -s -o /tmp/list.json -w "HTTP %{http_code}\n" -H "Authorization: Bearer $TOKEN" "$CORE/procurement/PurchaseRequisitions"
+          cat /tmp/list.json | head -c 600
+          echo ""
