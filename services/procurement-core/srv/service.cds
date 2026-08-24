@@ -21,7 +21,23 @@ type SyncResult {
  * supplier-onboarding flow, or synced in via syncLegacySuppliers below),
  * and POs only ever come out of approve().
  */
-service ProcurementService @(path: '/procurement') {
+// `requires: 'any'` HERE, at the service level, is the real fix for a
+// second real bug hit live deploying this: CAP's own HTTP adapter
+// (node_modules/@sap/cds/lib/srv/protocols/http.js) applies a SEPARATE,
+// SERVICE-WIDE gate ahead of any entity/action-level @requires or
+// @restrict - in production (NODE_ENV=production, true on CF, false
+// locally - confirmed by reading that file directly) it defaults EVERY
+// service to requiring 'authenticated-user' unless the SERVICE ITSELF
+// opts out via this exact annotation. The entity-level @restrict/
+// @requires below were real and correctly configured the whole time
+// (verified locally, and still work below) - they just never got a
+// chance to run, because this outer, service-level gate rejected
+// anonymous requests first, with a plain 401, before CDS's own
+// finer-grained authorization was ever consulted. This is exactly why
+// it worked locally (that outer gate is inactive outside production)
+// and 401'd on the real deployed instance - a genuinely environment-
+// dependent bug, not a logic error in the per-entity rules themselves.
+service ProcurementService @(path: '/procurement', requires: 'any') {
 
   // Public reads on purpose (requested explicitly, not a default): this
   // project's deployed Fiori preview UI (services/procurement-core/
