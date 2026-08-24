@@ -1,0 +1,48 @@
+name: scratch - xsuaa token test
+
+# Temporary diagnostic - real client_credentials grant against
+# procurement-core-xsuaa's real client, testing whether reads (no
+# @requires annotation) work with just an authenticated-but-scopeless
+# token. Delete this file once checked.
+
+on:
+  workflow_dispatch: {}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install cf CLI
+        run: |
+          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
+          sudo mv cf8 /usr/local/bin/cf
+      - name: cf login, get xsuaa client creds, try client_credentials grant
+        env:
+          CF_USERNAME: ${{ secrets.BTP_USERNAME }}
+          CF_PASSWORD: ${{ secrets.BTP_PASSWORD }}
+        run: |
+          cf api https://api.cf.us10-001.hana.ondemand.com
+          cf auth "$CF_USERNAME" "$CF_PASSWORD"
+          cf target -o 4cbf0c12trial -s dev
+          cf create-service-key procurement-core-xsuaa token-test >/dev/null 2>&1 || true
+          CREDS=$(cf service-key procurement-core-xsuaa token-test | sed -n '/{/,$p')
+          CLIENT_ID=$(echo "$CREDS" | jq -r '.credentials.clientid')
+          CLIENT_SECRET=$(echo "$CREDS" | jq -r '.credentials.clientsecret')
+          TOKEN_URL=$(echo "$CREDS" | jq -r '.credentials.url')
+          echo "token url: $TOKEN_URL"
+
+          echo "=== client_credentials grant ==="
+          RESP=$(curl -s "$TOKEN_URL/oauth/token" \
+            -u "$CLIENT_ID:$CLIENT_SECRET" \
+            -d "grant_type=client_credentials")
+          echo "$RESP" | jq '.'
+          TOKEN=$(echo "$RESP" | jq -r '.access_token')
+
+          echo "=== decoded token scopes ==="
+          echo "$TOKEN" | cut -d. -f2 | base64 -d 2>/dev/null | jq '.scope, .client_id, .grant_type' || true
+
+          echo "=== GET /procurement/PurchaseRequisitions with this token ==="
+          curl -s -o /tmp/resp.json -w "HTTP %{http_code}\n" \
+            -H "Authorization: Bearer $TOKEN" \
+            https://4cbf0c12trial-dev-procurement-core-srv.cfapps.us10-001.hana.ondemand.com/procurement/PurchaseRequisitions
+          cat /tmp/resp.json | head -c 500
