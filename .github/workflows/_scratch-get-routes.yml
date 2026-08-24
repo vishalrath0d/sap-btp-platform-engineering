@@ -22,6 +22,12 @@ jobs:
           cf api https://api.cf.us10-001.hana.ondemand.com
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
           cf target -o 4cbf0c12trial -s dev
+          echo "=== starting apps ==="
+          cf start api-gateway || true
+          cf start ai-copilot || true
+          cf start legacy-erp-gateway || true
+          cf start spend-anomaly-detector || true
+          cf start procurement-core-srv || true
           echo "=== apps ==="
           cf apps
           echo "=== routes ==="
