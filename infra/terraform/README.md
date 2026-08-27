@@ -243,6 +243,18 @@ subaccount-wide HANA Cloud instance (e.g. if this project later needed
 one instance shared across services in different spaces), just not the
 shape this specific broker needed here.
 
+**Trial auto-stop, hit twice now, codified the second time**: the
+instance auto-stops independently of CF apps (a separate trial policy —
+see the root README's "Live on BTP" section). Session 11 hit this and
+fixed it by hand once (`cf update-service ... serviceStopped:false
+--wait`). Session 12 hit the identical failure again on a redeploy after
+a few idle days (`procurement-core-db-deployer` failed 4/4 retries) —
+fixed by hand again, then actually codified into `cf-deploy.yml`'s
+`procurement-core` job this time (checks `cf service`'s plain-text
+output for a stopped state, resumes before deploying) so this self-heals
+on every future deploy instead of needing rediscovery each time it
+recurs.
+
 ## Cockpit equivalent, module by module
 
 See `docs/concepts/15-terraform-vs-cockpit.md` for the general "why

@@ -1,13 +1,118 @@
 # Continuity notes — read this at the start of every session
 
-Last updated: 2026-08-24 (end of session 11 — **all 5 services deployed
-and live on the real BTP trial for the first time**; found and fixed 8
-more real, live-only bugs getting there; the previously-unused
-Terraform-managed HANA Cloud + XSUAA instances gated off and destroyed;
-extensive documentation pass; **then, same session, closed the "no live
-UI / no real OAuth test" gap for real** — real password-grant token,
-Fiori preview UI live, one new HANA-only bug found and documented, not
-fixed — see the addendum at the end of the session 11 section below)
+Last updated: 2026-08-27 (end of session 12 — **SAP approved the trial
+Kyma request; spend-anomaly-detector deployed for real on Kyma and
+verified end-to-end**, real gateway-level JWT auth included; 5 more
+real, live-only bugs found and fixed getting there, all codified into
+the pipeline, not one-off manual fixes; CF's other 4 services
+redeployed clean, HANA auto-stop resume codified too — see the session
+12 section below)
+
+### Session 12 — Kyma is real: deployed, verified, 5 more real bugs fixed
+
+**The trigger**: SAP approved the trial Kyma request (sent session 10)
+— the real approval email arrived with a real kubeconfig download URL
+and dashboard link. Vishal asked: check everything still works, fix
+what's needed, deploy on Kyma.
+
+**Kyma cluster, confirmed real and live** (`kubectl` access, not just
+the email): 1 node Ready, BTP Operator Ready, every expected CRD
+present (`apirules.gateway.kyma-project.io`, `serviceinstances`/
+`servicebindings.services.cloud.sap.com`), real domain
+`cd97393.kyma.ondemand.com`, `us10`/AWS, 14-day trial auto-expiry
+(~2026-09-08).
+
+**Terraform finding, the deepest one this session**: flipping
+`kyma_enabled = true` didn't make `modules/kyma-env`'s adopt-lookup
+adopt the real cluster — a temporary debug output (added, used, removed
+same session, matching this project's own established convention)
+proved `data.btp_subaccount_environment_instances` returns exactly one
+instance for this subaccount (the pre-existing CF one), even with Kyma
+demonstrably live. SAP's trial-approval flow provisions Kyma through
+its own dedicated broker (`kyma-env-broker.cp.kyma.cloud.sap`, from the
+kubeconfig URL itself), not the self-service environment-instance path
+this data source queries. Fixed the same way as `modules/hana_cloud`/
+`modules/xsuaa`: `module.kyma_env`'s count hardcoded to `0` in root
+`main.tf`, real reasoning in that file's comment, module itself kept
+whole and correct for an account where this data source does see Kyma.
+Along the way, fixed a real latent bug: the module never actually
+declared its `dashboard_url`/`id` outputs — root `outputs.tf`'s
+reference to them via `try()` silently swallowed the "undeclared
+output" error the same way it swallows a missing module instance, so
+this never surfaced, it just always returned `null`. Fixed for real
+(harmless on this trial, a real bug for the non-trial case).
+
+**Auth fix, CI can't reuse a human's OIDC login**: the kubeconfig from
+SAP's email uses browser-based OIDC (`kubectl-oidc_login`) — works fine
+interactively (confirmed locally), but a GitHub Actions runner has no
+browser and no cached session. Rather than try to extract/reuse a
+human's cached OIDC token in CI (the actually-correct call: that's not
+what CI credentials should be anyway), created a dedicated
+`github-actions-deployer` ServiceAccount in the `procureiq` namespace,
+bound via **RoleBinding** (not ClusterRoleBinding — namespace-scoped
+`admin`, proper least-privilege) to a real Kubernetes `admin` ClusterRole,
+and built a static bearer-token kubeconfig from its `ServiceAccount`
+token instead. Stored as the `KYMA_KUBECONFIG` GitHub secret
+(base64-encoded, matching `kyma-deploy.yml`'s existing expectation — no
+workflow change needed for this half).
+
+**Four more real bugs found live, deploying for real against this
+cluster for the first time, all fixed and codified into the pipeline
+(not fixed by hand and left to regress)**:
+1. **APIRule v2 path syntax**: `/anomalies/*` failed server-side
+   validation — a `/*` *suffix* on a literal prefix isn't valid syntax;
+   only a bare `/*` or a `{*}`/`{**}` template placeholder is. Fixed to
+   `/anomalies/{*}` (single-segment match, matching the real route
+   `/anomalies/:poNumber`).
+2. **Istio sidecar injection**: APIRule sat in a real `Error` state
+   ("does not have an injected istio sidecar") because the `procureiq`
+   namespace was never labeled `istio-injection=enabled`. Sidecar
+   injection only happens at pod creation, not retroactively — needed
+   both the label and a rollout restart. Codified into `kyma-deploy.yml`
+   (`--overwrite` label + `rollout restart` every deploy, idempotent).
+3. **Namespace-label RBAC gap**: the deployer ServiceAccount's
+   namespace-scoped RoleBinding correctly couldn't `patch` the
+   cluster-scoped `Namespace` object itself — a real, expected
+   least-privilege boundary, not a bug. Fixed with a narrow
+   `ClusterRole`/`ClusterRoleBinding` granting exactly `get`/`list`/
+   `patch` on `namespaces`, not a broader grant.
+4. **XSUAA issuer mismatch**: a genuinely valid `client_credentials`
+   token was rejected with `401 Jwt issuer is not configured`. Root
+   cause, confirmed by decoding a real token: XSUAA's actual `iss` claim
+   is `<url>/oauth/token`, not the bare `<url>` the servicebinding
+   secret's own `url` field holds — Istio's JWT filter requires an exact
+   string match. JWKS stays under the bare URL though
+   (`<url>/token_keys`), so this needed two derived values, not one
+   reused for both. Fixed in `kyma-deploy.yml`.
+
+**Verified end-to-end, for real, after all four fixes**: `/health`
+(`noAuth`) → real `200`. `/anomalies` with no token → real `403 RBAC:
+access denied`. `/anomalies`, `/alerts`, `/admin/flags` with a real
+XSUAA `client_credentials` token (fetched live via `oauth/token`) → real
+`200`s with real JSON. Same rigor as `procurement-core`'s CF OAuth2 test
+from session 11.
+
+**Cleanup, spend-anomaly-detector moved back to its real home**:
+removed `services/spend-anomaly-detector/manifest.yml` (was explicitly
+documented as temporary) and its job from `cf-deploy.yml`;
+`wire-procurement-core-outbound-urls` now points `SPEND_ANOMALY_
+DETECTOR_URL` at the real Kyma APIRule host (a hardcoded literal — this
+specific trial cluster's real domain, not something to query via `cf`
+the way `legacy-erp-gateway`'s CF route still is).
+
+**A 5th real bug, hit redeploying CF afterward**: `procurement-core-db-
+deployer` failed 4/4 retries — the documented HANA Cloud trial
+auto-stop (session 11), hit again since the account had been idle a few
+days. Fixed by hand again (`cf update-service ... serviceStopped:false
+--wait`), then **codified into `cf-deploy.yml`** this time (checks `cf
+service`'s output for a stopped state, resumes before deploying) so
+future sessions don't need to rediscover and hand-fix this same
+recurring trial behavior again.
+
+**End state**: see root `README.md`'s "Live on BTP" table for the real
+URLs (Kyma's `spend-anomaly-detector-dev.cd97393.kyma.ondemand.com`
+alongside the 4 CF ones) and `infra/terraform/README.md`'s Kyma section
+for the full adopt-vs-create story.
 
 ### Session 11 — first real end-to-end deploy, 8 more real bugs, docs overhaul
 
@@ -423,15 +528,19 @@ otherwise, not a stopgap.
 
 ## Next steps, in order
 
-Infra is applied, all 5 services are deployed and live — this list is
-what's actually left, not "get to a first deploy" anymore:
+Infra is applied, all 5 services are deployed and live — Kyma included,
+for real, as of session 12 — this list is what's actually left:
 
-1. **Once SAP approves the pending Kyma trial request** (session 10 —
-   still pending, see `infra/terraform/README.md`'s Kyma section): flip
-   `kyma_enabled = true` in `environments/dev/terraform.tfvars`,
-   re-apply, then switch `spend-anomaly-detector`'s real deploy target
-   from `cf-deploy.yml` back to `kyma-deploy.yml`/`piper-kyma-deploy.yml`
-   (both already written and untouched, per session 10's notes).
+1. **Real, load-bearing deadline: this trial Kyma cluster auto-expires
+   ~2026-09-08** (14 days from provisioning, SAP's documented trial
+   policy, see `infra/terraform/README.md`'s Kyma section). When it
+   expires, `spend-anomaly-detector` needs a real plan, not silent
+   breakage: either request another trial cluster (same email process
+   as session 10, `kyma@sap.com`), or move it back to CF temporarily
+   again (the exact reverse of session 12's cleanup — `manifest.yml` and
+   the `cf-deploy.yml` job are gone now, would need reconstructing from
+   git history around commit `e34161a`), or accept the gap if a live
+   Kyma demo isn't needed at that moment. Don't let this be a surprise.
 2. ABAP Cloud/RAP via Eclipse+ADT, then `services/integration-flow`,
    then `transport/cloud-transport-management` — the entitlements for
    the first two are already granted and confirmed (session 10); none
@@ -444,9 +553,6 @@ what's actually left, not "get to a first deploy" anymore:
    inter-app calls that currently go over public routes — see
    `docs/operations/networking-and-request-flow.md`'s "Known
    limitations" for exactly which calls and why this wasn't done yet.
-5. A genuine end-to-end OAuth2/XSUAA token test against the deployed
-   `procurement-core` (not just CAP's local mocked auth) — see
-   `docs/operations/networking-and-request-flow.md` §3.
 
 ## Known housekeeping
 
