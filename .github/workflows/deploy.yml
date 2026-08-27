@@ -5,10 +5,13 @@ name: deploy
 # run to just the CF track, just Kyma, or either one's real-Piper-CLI
 # alternate mechanism instead.
 #
-# `kyma`/`piper-kyma` are currently not usable (no self-service Kyma on
-# this trial - see kyma-deploy.yml's own comment) - `cf`/`piper-cf` is
-# the real path right now, spend-anomaly-detector included (moved there
-# temporarily, see cf-deploy.yml).
+# `kyma`/`piper-kyma` are real and usable as of 2026-08-27 - SAP approved
+# the trial Kyma request and the cluster is live (see kyma-deploy.yml's
+# own comment and infra/terraform/README.md's Kyma section for the real
+# story, including why Terraform itself can't see/manage this trial's
+# cluster even though it's genuinely there). `cf`/`piper-cf` now deploys
+# four services again, not five - spend-anomaly-detector moved back to
+# Kyma, its real target, out of its temporary CF home.
 #
 # terraform apply is deliberately NOT a step in this file - see
 # infra/terraform's own terraform-apply.yml instead, and the mapping

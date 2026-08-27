@@ -1,14 +1,17 @@
 name: cf deploy (all Cloud Foundry services)
 
-# One deploy pipeline for every Cloud Foundry-bound service - now five,
-# not four: spend-anomaly-detector moved here temporarily (see its own
-# manifest.yml's comment) while its real target, Kyma, is blocked on
-# SAP's trial-approval process (docs/next/next.md). These five are a
-# bound landscape (api-gateway calls procurement-core, procurement-core
-# calls legacy-erp-gateway and spend-anomaly-detector), not independently-
-# released products, so one pipeline that deploys and sequences them
-# correctly is the more honest shape than five separate `if: false` jobs
-# that all happened to exist in different files. Testing
+# One deploy pipeline for every Cloud Foundry-bound service - back to
+# four (procurement-core, ai-copilot, legacy-erp-gateway, api-gateway):
+# spend-anomaly-detector moved back to its real target, Kyma
+# (kyma-deploy.yml), once SAP approved the trial Kyma request - it had
+# been here temporarily (see git history around session 10-11) while
+# that approval was pending. These four are a bound landscape
+# (api-gateway calls procurement-core, procurement-core calls
+# legacy-erp-gateway and, cross-runtime, spend-anomaly-detector on
+# Kyma), not independently-released products, so one pipeline that
+# deploys and sequences them correctly is the more honest shape than
+# four separate `if: false` jobs that all happened to exist in
+# different files. Testing
 # stays per-service on purpose (test.yml - one file, real per-service
 # change-detection via dorny/paths-filter) - that split IS standard, real
 # monorepo practice: a change to ai-copilot shouldn't re-run
@@ -210,35 +213,6 @@ jobs:
           cf target -o 4cbf0c12trial -s ${{ inputs.environment }}
           cf push -f manifest.yml
 
-  spend-anomaly-detector:
-    # Temporary CF home - see manifest.yml's comment. Plain cf_native
-    # push, same shape as ai-copilot/legacy-erp-gateway above; no XSUAA/
-    # HANA binding needed (the K8s ServiceInstance/ServiceBinding in k8s/
-    # were only ever for Kyma's APIRule-level auth, which has no CF
-    # equivalent wired up here - stated in manifest.yml, not hidden).
-    needs: [verify-confirmation]
-    if: always() && needs.verify-confirmation.result != 'failure'
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
-    defaults:
-      run:
-        working-directory: services/spend-anomaly-detector
-    steps:
-      - uses: actions/checkout@v4
-      - name: Install cf CLI
-        run: |
-          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=v8&source=github" | tar -zx
-          sudo mv cf8 /usr/local/bin/cf
-      - name: cf login and push
-        env:
-          CF_USERNAME: ${{ secrets.CF_USERNAME }}
-          CF_PASSWORD: ${{ secrets.CF_PASSWORD }}
-        run: |
-          cf api https://api.cf.us10-001.hana.ondemand.com
-          cf auth "$CF_USERNAME" "$CF_PASSWORD"
-          cf target -o 4cbf0c12trial -s ${{ inputs.environment }}
-          cf push -f manifest.yml
-
   api-gateway:
     # The one real ordering dependency in this landscape: api-gateway
     # needs procurement-core's live route to set PROCUREMENT_CORE_URL.
@@ -270,16 +244,27 @@ jobs:
 
   wire-procurement-core-outbound-urls:
     # The reverse direction from api-gateway's wiring above:
-    # procurement-core calls OUT to legacy-erp-gateway and
-    # spend-anomaly-detector (srv/lib/destination.js, srv/lib/events.js) -
-    # both need their real deployed routes, the same env-var-override
-    # mechanism destination.js already documents for docker-compose,
-    # here pointed at real CF routes instead of container names. A real,
-    # pre-existing gap closed while adding spend-anomaly-detector's CF
-    # path - legacy-erp-gateway's URL was never wired here before either.
-    needs: [procurement-core, spend-anomaly-detector, legacy-erp-gateway]
+    # procurement-core calls OUT to legacy-erp-gateway (a real CF route,
+    # queried live below) and spend-anomaly-detector (srv/lib/
+    # destination.js, srv/lib/events.js) - the same env-var-override
+    # mechanism destination.js already documents for docker-compose, here
+    # pointed at real deployed routes instead of container names.
+    #
+    # spend-anomaly-detector's URL is a hardcoded literal, not queried
+    # live like legacy-erp-gateway's - real, deliberate difference: it
+    # moved back to its natural home, Kyma (kyma-deploy.yml), once SAP
+    # approved the trial request, so there's no `cf app` to query for it
+    # anymore. Its APIRule host is this trial cluster's real, confirmed
+    # domain (services/spend-anomaly-detector/k8s/apirule.yaml's
+    # `hosts: [spend-anomaly-detector-dev]` + this trial's real cluster
+    # domain, cd97393.kyma.ondemand.com - see infra/terraform/README.md's
+    # Kyma section) - update this literal if the trial cluster is ever
+    # recreated (a new trial has a new, different shoot name/domain).
+    needs: [procurement-core, legacy-erp-gateway]
     runs-on: ubuntu-latest
     environment: ${{ inputs.environment }}
+    env:
+      SPEND_ANOMALY_DETECTOR_URL: https://spend-anomaly-detector-dev.cd97393.kyma.ondemand.com/events/purchase-order-created
     steps:
       - name: Install cf CLI
         run: |
@@ -294,11 +279,9 @@ jobs:
           cf auth "$CF_USERNAME" "$CF_PASSWORD"
           cf target -o 4cbf0c12trial -s ${{ inputs.environment }}
 
-          ANOMALY_GUID=$(cf app spend-anomaly-detector --guid)
-          ANOMALY_URL=$(cf curl "/v3/apps/${ANOMALY_GUID}/routes" | jq -r '.resources[0].url')
           LEGACY_GUID=$(cf app legacy-erp-gateway --guid)
           LEGACY_URL=$(cf curl "/v3/apps/${LEGACY_GUID}/routes" | jq -r '.resources[0].url')
 
-          cf set-env procurement-core-srv SPEND_ANOMALY_DETECTOR_URL "https://${ANOMALY_URL}/events/purchase-order-created"
+          cf set-env procurement-core-srv SPEND_ANOMALY_DETECTOR_URL "$SPEND_ANOMALY_DETECTOR_URL"
           cf set-env procurement-core-srv LEGACY_SUPPLIER_ERP_URL "https://${LEGACY_URL}"
           cf restage procurement-core-srv
