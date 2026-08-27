@@ -96,11 +96,24 @@ jobs:
 
       - name: Deploy to Kyma
         run: |
+          # istio-injection=enabled is real, load-bearing, and easy to
+          # miss: without it, pods in this namespace get no Istio
+          # sidecar, and APIRule's jwt access strategy depends entirely
+          # on Istio intercepting the pod's traffic - found live on the
+          # first real deploy against this trial cluster (2026-08-27),
+          # APIRule sat in a real "Error" state ("does not have an
+          # injected istio sidecar") until this label was set and the
+          # deployment rolled (sidecar injection only happens at pod
+          # creation, not retroactively). --overwrite makes this
+          # idempotent across every future deploy, not a one-time fix.
           kubectl get namespace procureiq || kubectl create namespace procureiq
+          kubectl label namespace procureiq istio-injection=enabled --overwrite
           kubectl apply -f k8s/service-instance.yaml
           kubectl apply -f k8s/service-binding.yaml
           kubectl wait --for=condition=Ready servicebinding/spend-anomaly-detector-xsuaa-binding -n procureiq --timeout=120s
           sed "s#spend-anomaly-detector:latest#spend-anomaly-detector:${{ github.sha }}#" k8s/deployment.yaml | kubectl apply -f -
+          kubectl rollout restart deployment/spend-anomaly-detector -n procureiq
+          kubectl rollout status deployment/spend-anomaly-detector -n procureiq --timeout=120s
           XSUAA_ISSUER=$(kubectl get secret spend-anomaly-detector-xsuaa-binding -n procureiq -o jsonpath='{.data.url}' | base64 -d)
           XSUAA_JWKS_URI="${XSUAA_ISSUER}/token_keys"
           export XSUAA_ISSUER XSUAA_JWKS_URI
