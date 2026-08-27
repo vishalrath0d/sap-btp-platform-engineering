@@ -18,12 +18,18 @@ kyma_administrators = ["vishaljanusingrathod@gmail.com"]
 
 # SAP approved the trial Kyma request 2026-08-25 (email confirmed,
 # cluster live - shoot "cd97393", domain cd97393.kyma.ondemand.com, us10/
-# AWS - 2026-08-27). Flipped to true so this module's adaptive lookup
-# ADOPTS the real, already-provisioned instance (0 create expected) -
-# see main.tf's module.kyma_env comment for why this module never needs
-# a code change for that half. Real, load-bearing operational fact: this
-# trial cluster auto-expires and is deleted 14 days after creation (SAP's
-# own documented policy) - i.e. around 2026-09-08 - not a one-time setup.
+# AWS - confirmed directly via kubectl 2026-08-27). Flipped to true -
+# though, found the same day: this module's adopt-lookup can't actually
+# see this trial's Kyma cluster at all (a different, deeper finding than
+# expected - see root main.tf's module.kyma_env comment for the full
+# story), so its resource count is hardcoded to 0 regardless of this
+# variable's value now. Left true anyway because it's still real,
+# accurate landscape state - Kyma IS enabled/in-use for this environment,
+# just not through this Terraform module; other tooling/docs (kyma-
+# deploy.yml, README) read this fact directly, not through Terraform.
+# Real, load-bearing operational fact regardless: this trial cluster
+# auto-expires and is deleted 14 days after creation (SAP's own
+# documented policy) - i.e. around 2026-09-08 - not a one-time setup.
 kyma_enabled = true
 
 # btp_username / btp_password / xsuaa_xsappname: intentionally NOT here,

@@ -32,6 +32,17 @@
 # Also worth knowing, confirmed in SAP's own docs while researching this:
 # trial Kyma clusters auto-expire and are deleted 14 days after creation -
 # not a one-time setup, a real recurring operational fact for trial use.
+#
+# Addendum, 2026-08-27, once approval actually landed: the adopt-lookup
+# below turned out NOT to work on this trial either - the data source it
+# queries genuinely doesn't return the cluster SAP provisioned through
+# its manual approval process (confirmed via a temporary debug output,
+# see git history). Root main.tf's module.kyma_env call now hardcodes
+# count=0 unconditionally rather than relying on this module's adopt-
+# vs-create logic to sort it out - this file's logic below is kept as
+# real, correct Terraform for a subaccount where the data source DOES
+# see Kyma (a non-trial account, or self-service-enabled Kyma), not
+# deleted, just not what's driving this trial's actual count anymore.
 data "btp_subaccount_environment_instances" "all" {
   subaccount_id = var.subaccount_id
 }

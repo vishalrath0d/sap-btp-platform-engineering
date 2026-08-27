@@ -12,16 +12,17 @@ output "cloudfoundry_org_id" {
 
 output "kyma_dashboard_url" {
   value       = try(module.kyma_env[0].dashboard_url, null)
-  description = "null while kyma_enabled = false (module.kyma_env isn't instantiated at all) - see main.tf's comment on that module call."
-}
-
-# Temporary diagnostic output (to be deleted after use) - see
-# modules/kyma-env/outputs.tf's own comment.
-output "debug_kyma_all_instances" {
-  value = try(module.kyma_env[0].debug_all_environment_instances, null)
-}
-output "debug_kyma_exists" {
-  value = try(module.kyma_env[0].debug_kyma_exists, null)
+  description = <<-EOT
+    null on this trial, always - module.kyma_env's count is 0 (see
+    main.tf's comment: this trial's Kyma cluster exists but isn't
+    manageable/discoverable via this module's API at all). The real
+    dashboard URL for this trial's actual cluster is
+    https://dashboard.kyma.cloud.sap/?kubeconfigID=E9B58919-D384-43E1-A3BA-8F6DB309F57B
+    (from the real SAP approval email, 2026-08-25) - document/use that
+    directly, don't expect this output to ever be non-null here. Stays
+    real and correct for a non-trial/paid subaccount where the module
+    actually instantiates.
+  EOT
 }
 
 # No xsuaa_credentials output anymore - module.xsuaa is gated to count=0

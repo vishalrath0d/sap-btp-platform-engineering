@@ -74,19 +74,37 @@ module "cloudfoundry_env" {
 }
 
 module "kyma_env" {
-  # Gated on var.kyma_enabled (default false) - kept whole, not deleted
-  # or commented out: this trial account genuinely has no self-service
-  # Kyma provisioning (confirmed twice over, see modules/kyma-env/
-  # main.tf's own comment and docs/next/next.md) - a request has been
-  # sent to SAP and is pending approval (up to a month). Every apply
-  # would otherwise fail on this one resource for a reason no retry
-  # fixes, blocking the whole apply over one thing that isn't ready yet.
-  # `count`, not the module going away, so flipping kyma_enabled back to
-  # true later (in environments/<env>/terraform.tfvars) needs no further
-  # code change - the module itself was never touched. Module-level
-  # count is real, standard Terraform (1.x+), same mechanism this
-  # project's other adaptive modules already use internally.
-  count = var.kyma_enabled ? 1 : 0
+  # Gated to 0 (2026-08-27; was `var.kyma_enabled ? 1 : 0` while the
+  # trial request was pending) - real capability boundary found live,
+  # same category as modules/hana_cloud and modules/xsuaa below, not a
+  # bug in this module's own code. SAP approved the trial Kyma request
+  # and the cluster is real and fully working (confirmed directly via
+  # kubectl against it: 1 node Ready, BTP Operator Ready, all expected
+  # CRDs present) - but a temporary debug output on this exact module
+  # (see git history around 2026-08-27) proved `data.btp_subaccount_
+  # environment_instances` genuinely does not return it: the API lists
+  # exactly one instance for this subaccount, the pre-existing Cloud
+  # Foundry one, even with the Kyma cluster live and in daily use. SAP's
+  # trial-Kyma-approval flow provisions the cluster through its own
+  # dedicated broker (see the kubeconfig download URL from the approval
+  # email: kyma-env-broker.cp.kyma.cloud.sap) rather than through the
+  # standard self-service environment-instance path this data source
+  # queries - so this module's adopt-lookup has nothing it CAN adopt,
+  # and (per the two already-documented CREATION_FAILED results from
+  # session 10, before approval) attempting to create is known to fail
+  # too. There is genuinely nothing for Terraform to manage here on this
+  # trial: the cluster is used directly via its kubeconfig (a GitHub
+  # Actions secret, KYMA_KUBECONFIG - see kyma-deploy.yml) instead.
+  # var.kyma_enabled stays true and still means something real - it's
+  # the landscape-level flag other tooling/docs read to know Kyma is
+  # part of this environment now - it just no longer drives this
+  # specific resource's count, since driving it was never going to work
+  # on this trial regardless of its value. Module kept whole, not
+  # deleted: it's correct Terraform for a subaccount where this same
+  # data source genuinely does list Kyma (a non-trial/paid account, or a
+  # trial where Kyma was self-service-enabled rather than support-
+  # approved) - just not this trial's actual shape.
+  count = 0
 
   source         = "./modules/kyma-env"
   subaccount_id  = module.subaccount.id

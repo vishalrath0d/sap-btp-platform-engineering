@@ -368,23 +368,39 @@ genuinely needing to be (re-)created.
   including Global Account ID, Subaccount ID, administrator emails, and a
   reason) — reviewed "on a case-by-case basis within one month," not
   guaranteed. Not fixable from Terraform or any code in this repo — a
-  genuinely account-side, human-approval-gated step. `modules/kyma-env`'s
-  adaptive lookup will correctly adopt the cluster once SAP eventually
-  provisions it, no code change needed for that half. Everything else in
-  this project (CF, XSUAA, role collections, all 5 entitlements) is fully
-  live-verified and unaffected by this — only the Kyma cluster itself, and
-  by extension `spend-anomaly-detector`'s real deployed testing, is
-  blocked pending SAP's approval. Also confirmed in SAP's docs while
-  chasing this down: once approved and provisioned, a trial Kyma cluster
-  auto-expires and is deleted 14 days later — not a one-time setup.
-- Kyma provisioning, once SAP approves the request above, genuinely takes
-  15-25 minutes to actually finish; expect to wait there when it happens.
-- **While waiting on that approval, `spend-anomaly-detector` (its
-  natural home is Kyma — see the root README's architecture diagram)
-  is temporarily deployed to CF instead**, via `cf-deploy.yml`, so all
-  5 services are live somewhere rather than 4 of 5. See that service's
-  own README and `docs/next/next.md` for the flip-back plan once Kyma is
-  approved.
+  genuinely account-side, human-approval-gated step. Also confirmed in
+  SAP's docs while chasing this down: once approved and provisioned, a
+  trial Kyma cluster auto-expires and is deleted 14 days later — not a
+  one-time setup.
+- **SAP approved the request 2026-08-25; the cluster is real and live —
+  but `modules/kyma-env`'s adaptive lookup turned out NOT to be able to
+  adopt it after all**, a real, deeper finding beyond what the paragraph
+  above expected. A temporary debug output on the module (2026-08-27,
+  see git history) proved `data.btp_subaccount_environment_instances`
+  returns exactly one instance for this subaccount — the pre-existing
+  Cloud Foundry one — even with the Kyma cluster demonstrably live
+  (confirmed directly via `kubectl`: 1 node Ready, BTP Operator Ready,
+  every expected CRD present). SAP's trial-approval flow provisions the
+  cluster through its own dedicated broker (the kubeconfig download URL
+  from the approval email is `kyma-env-broker.cp.kyma.cloud.sap`), not
+  through the standard self-service environment-instance path this data
+  source queries — so there's genuinely nothing for this module to see
+  or adopt. Fixed the same way as `modules/hana_cloud`/`modules/xsuaa`
+  below: `module.kyma_env`'s count is hardcoded to `0` in root `main.tf`,
+  with the real reasoning in that file's own comment. The module itself
+  is untouched and still correct for a subaccount where this data source
+  actually does see Kyma (a paid account, or self-service-enabled Kyma)
+  — just not this trial's real shape. Everything else in this project
+  (CF, XSUAA, role collections, all 5 entitlements) remains fully
+  live-verified and unaffected by any of this.
+- **The cluster is used directly via its kubeconfig instead of through
+  Terraform** — downloaded from the real URL in SAP's approval email,
+  stored as the `KYMA_KUBECONFIG` GitHub Actions secret (base64-encoded,
+  matching `kyma-deploy.yml`'s expectation). `spend-anomaly-detector`
+  (its natural home is Kyma — see the root README's architecture
+  diagram) moved back from its temporary Cloud Foundry home to a real
+  Kyma deploy via that workflow — see `docs/next/next.md` for the exact
+  sequence and result.
 - **Two more real, live-only bugs worth knowing if you're replicating
   this on your own trial**: this trial's actual CF org is a
   SAP-assigned name (`4cbf0c12trial`), not a name this project chose —
