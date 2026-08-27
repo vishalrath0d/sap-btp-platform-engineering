@@ -18,6 +18,16 @@
 # static value committed here the way the rest of this file is, the same
 # "known only after the real resource is provisioned" reality
 # infra/terraform's adaptive modules document for CF/Kyma.
+#
+# Real bug found on the first live apply against this trial's actual
+# cluster (2026-08-27): `/anomalies/*` failed API-server-side validation
+# - `spec.rules[].path` requires either a literal path, the bare string
+# `/*`, or a `{*}`/`{**}` template placeholder for a wildcard segment; a
+# `/*` SUFFIX on a literal prefix isn't valid syntax at all (confirmed
+# via the real error message's own regex). Fixed to `/anomalies/{*}` -
+# `{*}` matches exactly one path segment, the correct choice here since
+# the underlying route is `/anomalies/:poNumber` (server.js), a single
+# dynamic segment, not `{**}`'s open-ended multi-segment match.
 apiVersion: gateway.kyma-project.io/v2
 kind: APIRule
 metadata:
@@ -51,7 +61,7 @@ spec:
         authentications:
           - issuer: ${XSUAA_ISSUER}
             jwksUri: ${XSUAA_JWKS_URI}
-    - path: /anomalies/*
+    - path: /anomalies/{*}
       methods: ["GET"]
       jwt:
         authentications:
