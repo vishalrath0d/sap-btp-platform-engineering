@@ -16,11 +16,15 @@ region = "us10" # confirmed: matches the real CF API endpoint
 # regardless, since it's still the right value once Kyma is enabled.
 kyma_administrators = ["vishaljanusingrathod@gmail.com"]
 
-# false until SAP approves the trial Kyma request (sent, pending - see
-# docs/next/next.md) - see variables.tf's kyma_enabled description and
-# main.tf's module.kyma_env comment for the full story. Flip to true once
-# approved; nothing else in this repo needs to change.
-kyma_enabled = false
+# SAP approved the trial Kyma request 2026-08-25 (email confirmed,
+# cluster live - shoot "cd97393", domain cd97393.kyma.ondemand.com, us10/
+# AWS - 2026-08-27). Flipped to true so this module's adaptive lookup
+# ADOPTS the real, already-provisioned instance (0 create expected) -
+# see main.tf's module.kyma_env comment for why this module never needs
+# a code change for that half. Real, load-bearing operational fact: this
+# trial cluster auto-expires and is deleted 14 days after creation (SAP's
+# own documented policy) - i.e. around 2026-09-08 - not a one-time setup.
+kyma_enabled = true
 
 # btp_username / btp_password / xsuaa_xsappname: intentionally NOT here,
 # even as placeholders - Local-execution-mode HCP Terraform workspaces
