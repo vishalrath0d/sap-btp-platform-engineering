@@ -114,7 +114,17 @@ jobs:
           sed "s#spend-anomaly-detector:latest#spend-anomaly-detector:${{ github.sha }}#" k8s/deployment.yaml | kubectl apply -f -
           kubectl rollout restart deployment/spend-anomaly-detector -n procureiq
           kubectl rollout status deployment/spend-anomaly-detector -n procureiq --timeout=120s
-          XSUAA_ISSUER=$(kubectl get secret spend-anomaly-detector-xsuaa-binding -n procureiq -o jsonpath='{.data.url}' | base64 -d)
-          XSUAA_JWKS_URI="${XSUAA_ISSUER}/token_keys"
+          # Real bug found on first live end-to-end auth test (2026-08-27):
+          # a valid, real XSUAA-issued token was rejected with "Jwt issuer
+          # is not configured" - Istio's JWT filter requires an EXACT
+          # string match against the token's own `iss` claim, and XSUAA's
+          # real `iss` is `<url>/oauth/token` (confirmed by decoding a
+          # real token's payload), not the bare `<url>` this binding's
+          # `url` field itself holds. JWKS stays under the bare URL
+          # though (`<url>/token_keys`, not nested under `/oauth/token/`)
+          # - so this needs two derived values, not one reused for both.
+          XSUAA_URL=$(kubectl get secret spend-anomaly-detector-xsuaa-binding -n procureiq -o jsonpath='{.data.url}' | base64 -d)
+          XSUAA_ISSUER="${XSUAA_URL}/oauth/token"
+          XSUAA_JWKS_URI="${XSUAA_URL}/token_keys"
           export XSUAA_ISSUER XSUAA_JWKS_URI
           envsubst < k8s/apirule.yaml | kubectl apply -f -
