@@ -39,9 +39,10 @@ paths below.
 | procurement-core health | https://4cbf0c12trial-dev-procurement-core-srv.cfapps.us10-001.hana.ondemand.com/health |
 | ai-copilot health | https://ai-copilot.cfapps.us10-001.hana.ondemand.com/copilot/health |
 | legacy-erp-gateway suppliers | https://legacy-erp-gateway.cfapps.us10-001.hana.ondemand.com/legacy/suppliers |
-| spend-anomaly-detector reviews | https://spend-anomaly-detector.cfapps.us10-001.hana.ondemand.com/anomalies |
-| spend-anomaly-detector alerts | https://spend-anomaly-detector.cfapps.us10-001.hana.ondemand.com/alerts |
-| spend-anomaly-detector feature flags | https://spend-anomaly-detector.cfapps.us10-001.hana.ondemand.com/admin/flags |
+| spend-anomaly-detector health (Kyma, no token needed) | https://spend-anomaly-detector-dev.cd97393.kyma.ondemand.com/health |
+| spend-anomaly-detector reviews (Kyma, needs a real XSUAA bearer token — see below) | https://spend-anomaly-detector-dev.cd97393.kyma.ondemand.com/anomalies |
+| spend-anomaly-detector alerts (Kyma, needs a token) | https://spend-anomaly-detector-dev.cd97393.kyma.ondemand.com/alerts |
+| spend-anomaly-detector feature flags (Kyma, needs a token) | https://spend-anomaly-detector-dev.cd97393.kyma.ondemand.com/admin/flags |
 | **procurement-core Fiori UI — open this one** | **https://4cbf0c12trial-dev-procurement-core-srv.cfapps.us10-001.hana.ondemand.com/$fiori-preview/ProcurementService/PurchaseRequisitions** |
 | procurement-core raw OData reads | https://4cbf0c12trial-dev-procurement-core-srv.cfapps.us10-001.hana.ondemand.com/procurement/PurchaseRequisitions |
 
